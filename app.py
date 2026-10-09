@@ -6,6 +6,7 @@ import time
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from typing import Any
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from xml.sax.saxutils import escape
 
 import pandas as pd
@@ -37,6 +38,16 @@ DISCLAIMER = (
     "investments are subject to market risks. Past performance may not continue. Review scheme documents "
     "and consult a qualified financial adviser before making investment decisions."
 )
+
+
+def resolve_advisorkhoj_url(url: str | None = None) -> str:
+    """Ensure AdvisorKhoj uses the lightweight page mode for browser scraping."""
+    configured_url = (url or os.getenv("ADVISORKHOJ_URL") or DEFAULT_SOURCE_URL).strip()
+    parts = urlsplit(configured_url)
+    query = parse_qsl(parts.query, keep_blank_values=True)
+    if not any(key.casefold() == "pagespeed" for key, _ in query):
+        query.append(("PageSpeed", "noscript"))
+    return urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(query), parts.fragment))
 
 
 @dataclass(frozen=True)
@@ -208,13 +219,14 @@ def submit_source_form(page: Any) -> None:
 
 
 def fetch_one_fund(requested_name: str, category: str, period: str) -> FundCaptureData:
-    source_url = os.getenv("ADVISORKHOJ_URL", DEFAULT_SOURCE_URL)
+    source_url = resolve_advisorkhoj_url(os.getenv("ADVISORKHOJ_URL", DEFAULT_SOURCE_URL))
     try:
         with sync_playwright() as playwright:
             browser = playwright.chromium.launch(headless=True, args=["--no-sandbox"])
             page = browser.new_page()
             page.set_default_timeout(8000)
-            page.goto(source_url, wait_until="domcontentloaded", timeout=25000)
+            page.goto(source_url, wait_until="commit", timeout=60000)
+            page.wait_for_selector("select", timeout=20000)
             category_control, period_control, _ = source_select_options(page)
             selected_category = choose_option(category_control, category)
             selected_period = choose_option(period_control, SUPPORTED_PERIODS[period])
@@ -445,12 +457,13 @@ def build_pdf(funds: list[FundCaptureData], ranking: list[dict[str, Any]], analy
 
 
 def load_categories() -> list[str]:
-    source_url = os.getenv("ADVISORKHOJ_URL", DEFAULT_SOURCE_URL)
+    source_url = resolve_advisorkhoj_url(os.getenv("ADVISORKHOJ_URL", DEFAULT_SOURCE_URL))
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(headless=True, args=["--no-sandbox"])
         try:
             page = browser.new_page()
-            page.goto(source_url, wait_until="domcontentloaded", timeout=25000)
+            page.goto(source_url, wait_until="commit", timeout=60000)
+            page.wait_for_selector("select", timeout=20000)
             _, _, categories = source_select_options(page)
             return [category for category in categories if category and normalize_name(category) not in {"select", "select category"}]
         finally:
