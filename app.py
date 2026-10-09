@@ -115,7 +115,7 @@ def column_for(table: pd.DataFrame, phrase: str) -> Any:
 
 def select_scheme_suggestion(requested_name: str, suggestions: list[str]) -> str:
     """Resolve one scheme conservatively; never silently choose among variants."""
-    cleaned = [re.sub(r"\\s+", " ", str(item)).strip() for item in suggestions]
+    cleaned = [re.sub(r"\s+", " ", str(item)).strip() for item in suggestions]
     cleaned = list(dict.fromkeys(item for item in cleaned if item))
     if not cleaned:
         raise ValueError(f"AdvisorKhoj returned no scheme suggestions for '{requested_name}'.")
@@ -179,7 +179,7 @@ def fetch_advisorkhoj_suggestions(
             "Referer": source_url,
             "X-Requested-With": "XMLHttpRequest",
         }
-        tokens = re.sub(r"\\s+", " ", requested_name).strip().split()
+        tokens = re.sub(r"\s+", " ", requested_name).strip().split()
         if not tokens:
             raise ValueError("Enter a mutual-fund scheme name.")
 
@@ -468,7 +468,7 @@ def load_categories() -> list[str]:
         response.raise_for_status()
         document = lxml_html.fromstring(response.content)
         categories = [
-            re.sub(r"\\s+", " ", value).strip()
+            re.sub(r"\s+", " ", value).strip()
             for value in document.xpath('//select[@id="sel_schemeCategories"]/option/text()')
         ]
         categories = [
