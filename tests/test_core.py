@@ -38,7 +38,7 @@ def test_parse_fund_names_deduplicates_and_normalizes_whitespace():
     ]
 
 
-@pytest.mark.parametrize("value", ["Fund One", "Fund One\\nFund One", "\\n".join(f"Fund {i}" for i in range(11))])
+@pytest.mark.parametrize("value", ["Fund One", "Fund One\nFund One", "\n".join(f"Fund {i}" for i in range(11))])
 def test_parse_fund_names_rejects_invalid_count(value):
     with pytest.raises(ValueError):
         parse_fund_names(value)
