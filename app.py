@@ -607,7 +607,7 @@ def run_report(requested_funds: list[tuple[str, str]], period: str) -> tuple[lis
     for index, (name, category) in enumerate(requested_funds, start=1):
         st.write(f"Retrieving AdvisorKhoj figures for {index} of {len(requested_funds)}: {name}")
         funds.append(fetch_one_fund(name, category, period))
-    validate_unique_resolved_schemes(funds)
+        validate_unique_resolved_schemes(funds)
     ranking = rank_funds(funds)
     analysis = request_ai_analysis(funds, ranking, period)
     pdf_bytes = build_pdf(funds, ranking, analysis, period)
