@@ -1,9 +1,12 @@
+from unittest.mock import Mock
+
 import pandas as pd
 import pytest
 
 from app import (
     FundCaptureData,
     build_pdf,
+    fetch_advisorkhoj_suggestions,
     deterministic_score,
     identify_capture_table,
     parse_fund_names,
@@ -142,3 +145,45 @@ def test_select_scheme_suggestion_rejects_ambiguous_generic_name():
 def test_select_scheme_suggestion_rejects_no_suggestions():
     with pytest.raises(ValueError, match="no scheme suggestions"):
         select_scheme_suggestion("Unknown Fund", [])
+
+
+def test_fetch_advisorkhoj_suggestions_shortens_query_and_selects_direct_variant():
+    empty_response = Mock()
+    empty_response.json.return_value = []
+    empty_response.raise_for_status.return_value = None
+    found_response = Mock()
+    found_response.json.return_value = [
+        "Parag Parikh Flexi Cap Dir Gr",
+        "Parag Parikh Flexi Cap Reg Gr",
+    ]
+    found_response.raise_for_status.return_value = None
+    session = Mock()
+    session.post.side_effect = [empty_response, found_response]
+
+    result = fetch_advisorkhoj_suggestions(
+        "Parag Parikh Flexi Cap Dir Gr",
+        "Equity: Flexi Cap",
+        "https://www.advisorkhoj.com/mutual-funds-research/market-capture-ratio?PageSpeed=noscript",
+        session=session,
+    )
+
+    assert result == "Parag Parikh Flexi Cap Dir Gr"
+    assert session.post.call_count == 2
+    assert session.post.call_args_list[0].kwargs["data"]["query"] == "Parag Parikh Flexi Cap Dir Gr"
+    assert session.post.call_args_list[1].kwargs["data"]["query"] == "Parag Parikh Flexi Cap Dir"
+
+
+def test_fetch_advisorkhoj_suggestions_rejects_no_search_results():
+    empty_response = Mock()
+    empty_response.json.return_value = []
+    empty_response.raise_for_status.return_value = None
+    session = Mock()
+    session.post.return_value = empty_response
+
+    with pytest.raises(ValueError, match="found no scheme matching"):
+        fetch_advisorkhoj_suggestions(
+            "Unknown Fund",
+            "Equity: Flexi Cap",
+            "https://www.advisorkhoj.com/mutual-funds-research/market-capture-ratio?PageSpeed=noscript",
+            session=session,
+        )
