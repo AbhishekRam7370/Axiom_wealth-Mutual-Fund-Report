@@ -649,6 +649,14 @@ def main() -> None:
         [data-testid="stCheckbox"] label, [data-testid="stCheckbox"] label p {
             color: #344054 !important;
         }
+        .stTextInput input:focus-visible,
+        .stTextArea textarea:focus-visible,
+        [data-testid="stSelectbox"] [role="combobox"]:focus-visible,
+        [data-testid="stButton"] button:focus-visible,
+        [data-testid="stDownloadButton"] button:focus-visible {
+            outline: 3px solid #56a7b1 !important;
+            outline-offset: 2px !important;
+        }
         [data-testid="stAlert"] * { color: #344054 !important; }
         [data-testid="stButton"] button, [data-testid="stDownloadButton"] button {
             min-height: 2.6rem;
@@ -770,10 +778,8 @@ def main() -> None:
 
             try:
                 categories = load_categories()
-                category_load_error = None
-            except Exception as error:
+            except Exception:
                 categories = []
-                category_load_error = str(error)
                 st.warning("AdvisorKhoj category choices are temporarily unavailable. You can enter the exact category label manually below.")
 
             for index, entry in enumerate(st.session_state.fund_entries):
