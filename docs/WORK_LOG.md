@@ -15,3 +15,5 @@
 ## Time accounting
 
 Active implementation time was not measured by a reliable timer. No numerical hours total is claimed. Record the actual active work time in the assignment submission once it has been measured.
+
+- Follow-up mapping check: the local live retrieval returned the correct 77% up capture and 58% down capture but initially mapped `capture_ratio` to the up-capture column because column matching used a substring. The latest branch now prefers exact normalized column headers and adds a regression test expecting the source's separate `Capture Ratio` value (1.33). The updated 25-case suite and retrieval result must be verified after the user pulls the latest commit.
