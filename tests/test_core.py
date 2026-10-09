@@ -17,6 +17,8 @@ from app import (
     rank_funds,
     resolve_advisorkhoj_url,
     select_scheme_suggestion,
+    run_report,
+    validate_unique_resolved_schemes,
 )
 
 
@@ -83,6 +85,35 @@ def test_rank_funds_uses_capture_ratio_and_preserves_unique_funds():
     assert [item["rank"] for item in ranking] == [1, 2]
 
 
+def test_rank_funds_prioritizes_negative_ratio_only_when_down_capture_is_negative():
+    ordinary = make_fund("Ordinary Fund", 110, 100, 1.10)
+    negative_due_to_downside = make_fund("Downside Protective Fund", 100, -10, -10.0)
+    negative_due_to_upside = make_fund("Negative Upside Fund", -10, 10, -1.0)
+
+    ranking = rank_funds([ordinary, negative_due_to_upside, negative_due_to_downside])
+
+    assert [item["scheme_name"] for item in ranking] == [
+        "Downside Protective Fund",
+        "Ordinary Fund",
+        "Negative Upside Fund",
+    ]
+
+
+def test_deterministic_score_rejects_missing_capture_ratio_instead_of_mixing_metrics():
+    fund = replace(make_fund("Fund Without Ratio", 105, 90, 1.16), capture_ratio=None)
+
+    with pytest.raises(ValueError, match="did not provide a Capture Ratio"):
+        deterministic_score(fund)
+
+
+def test_validate_unique_resolved_schemes_rejects_aliases_of_same_canonical_fund():
+    first = make_fund("Canonical Fund", 100, 90, 1.11)
+    second = replace(first, requested_name="A different alias", category="Equity: Flexi Cap")
+
+    with pytest.raises(ValueError, match="same AdvisorKhoj scheme"):
+        validate_unique_resolved_schemes([first, second])
+
+
 def test_build_comparison_preview_keeps_rank_order_and_benchmarks():
     fund_one = make_fund("Fund One", 105, 90, 1.16)
     fund_two = replace(
@@ -128,9 +159,15 @@ def test_build_pdf_handles_provenance_ampersands_and_long_source_url():
     )
     ranking = rank_funds([fund])
     analysis = {
-        "overall_summary": "The fund has a source record.",
+        "overall_summary": "The <fund> has a source record & should remain plain text.",
         "funds": [
-            {"scheme_name": "Fund One", "rank": 1, "reason": "Example reason.", "strengths": ["Example strength"], "limitations": ["Example limitation"]},
+            {
+                "scheme_name": "Fund One",
+                "rank": 1,
+                "reason": "The model returned <unexpected> markup & symbols.",
+                "strengths": ["Example & strength <note>"],
+                "limitations": ["Example limitation with 5 < 10."],
+            },
         ],
     }
 
@@ -138,6 +175,62 @@ def test_build_pdf_handles_provenance_ampersands_and_long_source_url():
 
     assert result.startswith(b"%PDF")
     assert len(result) > 1000
+
+
+def test_run_report_builds_pdf_from_mocked_source_and_ai(monkeypatch):
+    funds_by_input = {
+        "Fund One": make_fund("Fund One", 105, 90, 1.16),
+        "Fund Two": make_fund("Fund Two", 98, 95, 1.03),
+    }
+
+    def fake_fetch(name, category, period):
+        return replace(funds_by_input[name], requested_name=name, category=category, period="5 Years")
+
+    def fake_analysis(funds, ranking, period):
+        return {
+            "overall_summary": "The funds differ in market capture behaviour.",
+            "funds": [
+                {
+                    "scheme_name": item["scheme_name"],
+                    "rank": item["rank"],
+                    "reason": "Test explanation & no investment advice.",
+                    "strengths": ["Strength"],
+                    "limitations": ["Limitation"],
+                }
+                for item in ranking
+            ],
+        }
+
+    monkeypatch.setattr("app.fetch_one_fund", fake_fetch)
+    monkeypatch.setattr("app.request_ai_analysis", fake_analysis)
+
+    funds, ranking, analysis, pdf_bytes = run_report(
+        [("Fund One", "Equity: Large Cap"), ("Fund Two", "Equity: Large Cap")],
+        "5 years",
+    )
+
+    assert len(funds) == 2
+    assert [item["rank"] for item in ranking] == [1, 2]
+    assert len(analysis["funds"]) == 2
+    assert pdf_bytes.startswith(b"%PDF")
+
+
+def test_run_report_stops_before_ai_when_inputs_resolve_to_same_scheme(monkeypatch):
+    canonical = make_fund("Canonical Fund", 105, 90, 1.16)
+    monkeypatch.setattr(
+        "app.fetch_one_fund",
+        lambda name, category, period: replace(canonical, requested_name=name, category=category),
+    )
+    monkeypatch.setattr(
+        "app.request_ai_analysis",
+        lambda *args: pytest.fail("AI must not run when canonical schemes are duplicated"),
+    )
+
+    with pytest.raises(ValueError, match="same AdvisorKhoj scheme"):
+        run_report(
+            [("Fund alias A", "Equity: Large Cap"), ("Fund alias B", "Equity: Flexi Cap")],
+            "5 years",
+        )
 
 
 @pytest.mark.parametrize(
