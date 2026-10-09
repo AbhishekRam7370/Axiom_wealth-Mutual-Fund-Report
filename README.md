@@ -24,8 +24,11 @@ The UI is organized as three working areas: build a comparison (2–10 unique sc
 - Retrieve scheme, benchmark, up-capture, down-capture, and capture-ratio figures from the AdvisorKhoj Market Capture Ratio tool.
 - Calculate a deterministic ranking before requesting the LLM explanation.
 - Validate the AI response for complete fund coverage and consistent ranking.
-- Generate a selectable-text PDF containing figures, ranking, explanations, source provenance, retrieval timestamps, and a risk disclaimer.
-- Show actionable errors instead of inventing missing data.
+- Review a benchmark-aware comparison table and a chart built from the retrieved up/down capture values.
+- Expand per-scheme AI explanations to read ranking rationale, strengths, and limitations.
+- Keep a generated result visible across normal Streamlit reruns, including PDF download interactions.
+- Generate a selectable-text PDF containing figures, ranking, explanations, clickable source provenance, retrieval timestamps, and a risk disclaimer.
+- Use responsive layouts, high-contrast form controls, loading/status messages, an empty state, and actionable errors instead of invented data.
 
 ## Technology
 
