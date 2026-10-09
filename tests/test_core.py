@@ -176,7 +176,7 @@ def test_build_pdf_handles_provenance_ampersands_and_long_source_url():
 
     assert result.startswith(b"%PDF")
     assert len(result) > 1000
-    assert b"/URI" in result  # the AdvisorKhoj source link is embedded in the PDF
+    assert b"/URI" in result
 
 
 def test_request_ai_analysis_requires_api_key(monkeypatch):

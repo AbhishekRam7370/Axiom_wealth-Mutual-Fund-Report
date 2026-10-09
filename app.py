@@ -188,8 +188,6 @@ def fetch_advisorkhoj_suggestions(
         if not tokens:
             raise ValueError("Enter a mutual-fund scheme name.")
 
-        # The source endpoint is prefix-oriented; dropping trailing generic words
-        # such as 'Fund' can reveal the canonical scheme labels.
         tried: set[str] = set()
         for width in range(len(tokens), 0, -1):
             query = " ".join(tokens[:width])
@@ -308,19 +306,12 @@ def ranking_order_key(fund: FundCaptureData) -> tuple[int, float]:
     up_capture = fund.up_capture_percent
     down_capture = fund.down_capture_percent
 
-    # AdvisorKhoj notes that a negative ratio can be favourable when it is caused by
-    # negative down-market capture (with non-negative up-market capture). Order these
-    # first, putting more negative ratios first; other negative ratios are not treated
-    # as favourable just because they are negative.
     if score < 0 and down_capture is not None and down_capture < 0 and up_capture is not None and up_capture >= 0:
         return (0, score)
 
-    # For ordinary non-negative capture ratios, larger ratios come first.
     if score >= 0 and (up_capture is None or up_capture >= 0) and (down_capture is None or down_capture >= 0):
         return (1, -score)
 
-    # A negative ratio not explained by negative down-market capture is placed after
-    # the ordinary non-negative ratios; retain deterministic ordering within this group.
     return (2, -score)
 
 
@@ -915,8 +906,6 @@ def main() -> None:
             else:
                 st.warning("AI analysis is not configured. Add OPENAI_API_KEY to the environment or local .env file.")
             if st.button("Generate report & prepare PDF", type="primary", use_container_width=True):
-                # Clear the previous result immediately so a failed new attempt cannot
-                # leave stale values visible beside an error message.
                 st.session_state.last_report = None
                 clean_entries = [
                     (entry["name"].strip(), entry["category"].strip())
