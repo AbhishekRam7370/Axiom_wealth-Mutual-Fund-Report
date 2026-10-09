@@ -368,7 +368,9 @@ def request_ai_analysis(funds: list[FundCaptureData], ranking: list[dict[str, An
         "returns, dates, benchmarks, or risk metrics. Explain that a higher up-capture can indicate more "
         "participation in rising markets and a lower down-capture can indicate less participation in falling "
         "markets, while noting benchmark and category differences. The deterministic ranking is authoritative; "
-        "do not reorder funds. Return valid JSON with keys overall_summary and funds. funds must contain each "
+        "do not reorder funds. A negative capture ratio is treated as favourable only when it results from negative "
+        "down-market capture and non-negative up-market capture; otherwise negative ratios are ranked after non-negative "
+        "ratios. Return valid JSON with keys overall_summary and funds. funds must contain each "
         "scheme_name exactly once with rank, reason, strengths, limitations. Keep explanations concise and "
         "balanced. Do not provide individualized investment advice."
     )
@@ -394,10 +396,10 @@ def request_ai_analysis(funds: list[FundCaptureData], ranking: list[dict[str, An
         result = json.loads(response.json()["choices"][0]["message"]["content"])
     except (ValueError, KeyError, IndexError, TypeError) as error:
         raise RuntimeError("The AI provider returned an invalid analysis response.") from error
-    expected = {fund.scheme_name for fund in funds}
-    actual_funds = result.get("funds")
     if not isinstance(result, dict):
         raise RuntimeError("The AI provider returned a JSON value that is not an analysis object.")
+    expected = {fund.scheme_name for fund in funds}
+    actual_funds = result.get("funds")
     if not isinstance(actual_funds, list):
         raise RuntimeError("The AI response did not contain a valid fund analysis list.")
     if any(not isinstance(item, dict) for item in actual_funds):
