@@ -518,6 +518,7 @@ def build_pdf(funds: list[FundCaptureData], ranking: list[dict[str, Any]], analy
     return output.getvalue()
 
 
+@st.cache_data(ttl=3600, show_spinner=False)
 def load_categories() -> list[str]:
     source_url = resolve_advisorkhoj_url(os.getenv("ADVISORKHOJ_URL", DEFAULT_SOURCE_URL))
     try:
@@ -559,100 +560,179 @@ def safe_paragraph(value: Any) -> str:
     return escape(str(value))
 
 
+
+def build_comparison_preview(
+    funds: list[FundCaptureData],
+    ranking: list[dict[str, Any]],
+) -> pd.DataFrame:
+    """Build a real-data preview in the same deterministic order as the report ranking."""
+    funds_by_name = {fund.scheme_name: fund for fund in funds}
+    rows: list[dict[str, Any]] = []
+    for item in ranking:
+        fund = funds_by_name[item["scheme_name"]]
+        rows.append({
+            "Rank": item["rank"],
+            "Fund": fund.scheme_name,
+            "Category": fund.category,
+            "Benchmark": fund.benchmark_name,
+            "Up-market capture (%)": fund.up_capture_percent,
+            "Down-market capture (%)": fund.down_capture_percent,
+            "Capture ratio": fund.capture_ratio,
+        })
+    return pd.DataFrame(rows)
+
+
+def display_metric(value: float | None, suffix: str = "") -> str:
+    """Format a retrieved metric for a compact visual summary without inventing missing data."""
+    return "—" if value is None else f"{value:.2f}{suffix}"
+
+
 def main() -> None:
-    st.set_page_config(page_title="Fund Report | Market Capture Intelligence", page_icon="📊", layout="wide")
+    st.set_page_config(
+        page_title="Fund Report | Market Capture Intelligence",
+        page_icon="📊",
+        layout="wide",
+        initial_sidebar_state="collapsed",
+    )
     st.markdown(
         """
         <style>
         :root { color-scheme: light; }
-        .stApp,
-        [data-testid="stAppViewContainer"] {
-            background: #f5f7fb !important;
-            color: #1f2937 !important;
+        .stApp, [data-testid="stAppViewContainer"] {
+            background: #f3f6fa !important;
+            color: #1d2939 !important;
         }
-        .block-container { max-width: 1120px; padding-top: 2rem; }
-        .stApp p,
-        .stApp li,
-        .stApp label,
-        .stApp legend,
+        [data-testid="stHeader"] {
+            background: rgba(243, 246, 250, .92) !important;
+        }
+        .block-container {
+            max-width: 1380px;
+            padding: 1.5rem clamp(1rem, 3vw, 2.5rem) 3rem;
+        }
+        .stApp p, .stApp li, .stApp label, .stApp legend,
         .stApp [data-testid="stMarkdownContainer"],
-        .stApp [data-testid="stWidgetLabel"] {
-            color: #1f2937 !important;
-        }
-        .stApp h1,
-        .stApp h2,
-        .stApp h3,
-        .stApp h4,
-        .stApp h5,
-        .stApp h6 {
+        .stApp [data-testid="stWidgetLabel"] { color: #344054 !important; }
+        .stApp h1, .stApp h2, .stApp h3, .stApp h4, .stApp h5 {
             color: #102a43 !important;
+            letter-spacing: -.025em;
         }
-        [data-testid="stCaptionContainer"],
-        .stCaption {
-            color: #475569 !important;
+        .stApp h1 { letter-spacing: -.04em; }
+        [data-testid="stCaptionContainer"], .stCaption { color: #667085 !important; }
+        [data-testid="stVerticalBlockBorderWrapper"] {
+            background: #ffffff;
+            border: 1px solid #e2e8f0 !important;
+            border-radius: 16px !important;
+            box-shadow: 0 2px 7px rgba(16, 42, 67, .035);
         }
-        .stTextInput input,
-        .stTextArea textarea,
-        [data-baseweb="input"] input,
-        [data-baseweb="textarea"] textarea {
-            background-color: #ffffff !important;
+        .stTextInput input, .stTextArea textarea, [data-baseweb="input"] input {
+            background: #ffffff !important;
             color: #172b4d !important;
             -webkit-text-fill-color: #172b4d !important;
-            border-color: #94a3b8 !important;
+            border-color: #cbd5e1 !important;
+            border-radius: 9px !important;
         }
-        .stTextInput input::placeholder,
-        .stTextArea textarea::placeholder,
-        [data-baseweb="input"] input::placeholder,
-        [data-baseweb="textarea"] textarea::placeholder {
-            color: #64748b !important;
-            -webkit-text-fill-color: #64748b !important;
+        .stTextInput input::placeholder, .stTextArea textarea::placeholder {
+            color: #7b8794 !important;
+            -webkit-text-fill-color: #7b8794 !important;
             opacity: 1 !important;
         }
         [data-testid="stSelectbox"] [data-baseweb="select"] > div,
-        [data-baseweb="popover"],
-        [role="listbox"],
-        [role="option"] {
-            background-color: #ffffff !important;
+        [data-baseweb="popover"], [role="listbox"], [role="option"] {
+            background: #ffffff !important;
             color: #172b4d !important;
         }
-        [data-testid="stSelectbox"] [data-baseweb="select"] * ,
-        [data-baseweb="popover"] *,
-        [role="listbox"] *,
-        [role="option"] * {
+        [data-testid="stSelectbox"] [data-baseweb="select"] *,
+        [data-baseweb="popover"] *, [role="listbox"] *, [role="option"] * {
             color: #172b4d !important;
         }
-        [data-testid="stRadio"] label,
-        [data-testid="stRadio"] label p,
-        [data-testid="stCheckbox"] label,
-        [data-testid="stCheckbox"] label p {
-            color: #1f2937 !important;
+        [data-testid="stRadio"] label, [data-testid="stRadio"] label p,
+        [data-testid="stCheckbox"] label, [data-testid="stCheckbox"] label p {
+            color: #344054 !important;
         }
-        [data-testid="stAlert"] * {
-            color: #1f2937 !important;
+        [data-testid="stAlert"] * { color: #344054 !important; }
+        [data-testid="stButton"] button, [data-testid="stDownloadButton"] button {
+            min-height: 2.6rem;
+            border-radius: 9px !important;
+            font-weight: 650 !important;
+            transition: background-color .15s ease, border-color .15s ease;
         }
-        [data-testid="stButton"] button,
-        [data-testid="stDownloadButton"] button {
-            background-color: #14324a !important;
-            color: #ffffff !important;
-            border: 1px solid #14324a !important;
-        }
-        [data-testid="stButton"] button *,
-        [data-testid="stDownloadButton"] button * {
+        [data-testid="stButton"] button[kind="primary"],
+        [data-testid="stDownloadButton"] button[kind="primary"] {
+            background: #145c63 !important;
+            border-color: #145c63 !important;
             color: #ffffff !important;
         }
-        .hero {
-            padding: 1.7rem 2rem;
+        [data-testid="stButton"] button[kind="primary"]:hover,
+        [data-testid="stDownloadButton"] button:hover {
+            background: #0e464c !important;
+            border-color: #0e464c !important;
+            color: #ffffff !important;
+        }
+        [data-testid="stButton"] button[kind="secondary"] {
+            background: #ffffff !important;
+            color: #174c56 !important;
+            border: 1px solid #bfd1d7 !important;
+        }
+        [data-testid="stButton"] button[kind="secondary"] * { color: #174c56 !important; }
+        .fr-brand {
+            display: flex; align-items: center; gap: 12px; margin-bottom: 1.1rem;
+        }
+        .fr-mark {
+            display: flex; align-items: center; justify-content: center;
+            width: 44px; height: 44px; border-radius: 12px;
+            background: #123a4a; color: white; font-size: 20px; font-weight: 800;
+            letter-spacing: -.04em;
+        }
+        .fr-brand-name { font-size: 1rem; font-weight: 750; color: #102a43; line-height: 1.25; }
+        .fr-brand-sub { margin-top: 3px; font-size: .77rem; color: #667085; letter-spacing: .08em; text-transform: uppercase; }
+        .fr-hero {
+            padding: clamp(1.25rem, 3vw, 2rem);
             border-radius: 18px;
-            background: linear-gradient(120deg, #14324a, #246b78);
+            background: #123a4a;
             color: #ffffff;
-            margin-bottom: 1.5rem;
+            margin-bottom: 1rem;
         }
-        .hero h1 { color: #ffffff !important; margin-bottom: .4rem; }
-        .hero p { color: #e5f0f4 !important; font-size: 1.05rem; }
+        .fr-eyebrow { color: #b5dadd; font-size: .76rem; font-weight: 750; letter-spacing: .12em; text-transform: uppercase; }
+        .fr-hero h1 { color: #ffffff !important; margin: .45rem 0 .45rem; font-size: clamp(1.8rem, 4vw, 2.65rem); }
+        .fr-hero p { color: #dcebed !important; max-width: 750px; margin: 0; font-size: 1rem; line-height: 1.65; }
+        .fr-chip-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 1rem 0 1.4rem; }
+        .fr-chip {
+            background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px;
+            padding: 14px 16px; min-width: 0;
+        }
+        .fr-chip-label { color: #667085; font-size: .76rem; font-weight: 650; text-transform: uppercase; letter-spacing: .06em; }
+        .fr-chip-value { color: #123a4a; font-size: 1.08rem; font-weight: 750; margin-top: 5px; }
+        .fr-chip-note { color: #667085; font-size: .8rem; margin-top: 3px; line-height: 1.4; }
+        .fr-section-kicker { color: #14717a; text-transform: uppercase; letter-spacing: .1em; font-size: .73rem; font-weight: 750; }
+        .fr-card-title { color: #102a43; font-weight: 750; font-size: 1.08rem; margin: .25rem 0 .2rem; }
+        .fr-muted { color: #667085; font-size: .88rem; line-height: 1.5; }
+        .fr-footer { margin-top: 2rem; padding-top: 1rem; border-top: 1px solid #dce4ec; color: #667085; font-size: .78rem; line-height: 1.6; }
+        @media (max-width: 700px) {
+            .block-container { padding: 1rem .75rem 2rem; }
+            .fr-chip-row { grid-template-columns: 1fr; gap: 8px; }
+            .fr-chip { padding: 11px 13px; }
+            .fr-brand { margin-bottom: .8rem; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after { transition: none !important; animation: none !important; }
+        }
         </style>
-        <div class="hero">
-          <h1>Fund Report</h1>
-          <p>Compare mutual funds using AdvisorKhoj market capture figures and evidence-based AI explanations.</p>
+        <div class="fr-brand">
+          <div class="fr-mark">FR</div>
+          <div>
+            <div class="fr-brand-name">Fund Report</div>
+            <div class="fr-brand-sub">Market Capture Intelligence</div>
+          </div>
+        </div>
+        <section class="fr-hero">
+          <div class="fr-eyebrow">Research workspace · Mutual funds</div>
+          <h1>Compare how funds participate in markets.</h1>
+          <p>Build a source-backed comparison with AdvisorKhoj market-capture figures, a transparent ranking rule, concise AI explanations, and a downloadable PDF. No portfolio balances or unsupported performance statistics are inferred.</p>
+        </section>
+        <div class="fr-chip-row">
+          <div class="fr-chip"><div class="fr-chip-label">Comparison size</div><div class="fr-chip-value">2–10 schemes</div><div class="fr-chip-note">Choose between two and ten unique schemes.</div></div>
+          <div class="fr-chip"><div class="fr-chip-label">Reporting windows</div><div class="fr-chip-value">1 · 3 · 5 · 10 years</div><div class="fr-chip-note">Use the same source period for every selected fund.</div></div>
+          <div class="fr-chip"><div class="fr-chip-label">Primary data source</div><div class="fr-chip-value">AdvisorKhoj</div><div class="fr-chip-note">Scheme-level figures, benchmark and source URL.</div></div>
         </div>
         """,
         unsafe_allow_html=True,
@@ -660,102 +740,282 @@ def main() -> None:
 
     if "fund_entries" not in st.session_state:
         st.session_state.fund_entries = [{"name": "", "category": ""} for _ in range(2)]
+    if "last_report" not in st.session_state:
+        st.session_state.last_report = None
 
-    with st.expander("How this report works", expanded=False):
-        st.write("The application retrieves each fund's figures from AdvisorKhoj, calculates a deterministic comparison order, and asks the configured language model to explain the evidence. Missing source figures stop report generation instead of being invented.")
-        st.caption("Market capture ratios are only one comparison lens. This report is educational and is not individualized investment advice.")
+    config_column, settings_column = st.columns([1.55, 0.85], gap="large")
+    with config_column:
+        with st.container(border=True):
+            st.markdown('<div class="fr-section-kicker">Step 01</div>', unsafe_allow_html=True)
+            st.subheader("Build your comparison")
+            st.caption("Enter two to ten unique schemes. Each scheme uses its own AdvisorKhoj category.")
+            with st.expander("Paste a list of fund names", expanded=False):
+                pasted_names = st.text_area(
+                    "Scheme names",
+                    height=105,
+                    placeholder="HDFC Large Cap Fund\nMirae Asset Large Cap Fund",
+                    help="One scheme per line, or separate names with commas or semicolons.",
+                    key="pasted_fund_names",
+                )
+                if st.button("Apply names to the form", use_container_width=True):
+                    try:
+                        names = parse_fund_names(pasted_names)
+                        st.session_state.fund_entries = [{"name": name, "category": ""} for name in names]
+                        for index in range(10):
+                            st.session_state[f"fund_name_{index}"] = names[index] if index < len(names) else ""
+                            st.session_state[f"fund_category_{index}"] = "Select category"
+                        st.rerun()
+                    except ValueError as error:
+                        st.error(str(error))
 
-    left, right = st.columns([1.2, 0.8], gap="large")
-    with left:
-        st.subheader("1. Choose your funds")
-        st.write("Select 2–10 unique funds. Each fund can use its own AdvisorKhoj category.")
-        st.caption("Use an exact scheme label if multiple variants exist; specify Direct/Dir or Regular/Reg when needed.")
-        pasted_names = st.text_area("Paste fund names (one per line, or comma-separated)", height=100, placeholder="HDFC Large Cap Fund\nMirae Asset Large Cap Fund")
-        if st.button("Fill fund fields from pasted list", use_container_width=True):
             try:
-                names = parse_fund_names(pasted_names)
-                st.session_state.fund_entries = [{"name": name, "category": ""} for name in names]
-                for index in range(10):
-                    st.session_state[f"fund_name_{index}"] = names[index] if index < len(names) else ""
-                    st.session_state[f"fund_category_{index}"] = "Select category"
-                st.rerun()
-            except ValueError as error:
-                st.error(str(error))
-        try:
-            categories = st.cache_data(ttl=3600, show_spinner=False)(load_categories)()
-        except Exception:
-            categories = []
-            st.warning("AdvisorKhoj category options could not be loaded right now. Refresh later; categories are not guessed.")
-        if not categories:
-            categories = []
-        for index, entry in enumerate(st.session_state.fund_entries):
-            st.markdown(f"**Fund {index + 1}**")
-            name_column, category_column = st.columns([1.5, 1])
-            with name_column:
-                entry["name"] = st.text_input(f"Fund name {index + 1}", value=entry["name"], key=f"fund_name_{index}", label_visibility="collapsed", placeholder="Fund name or exact AdvisorKhoj scheme label")
-            with category_column:
-                if categories:
-                    options = ["Select category"] + categories
-                    current = entry["category"] if entry["category"] in categories else "Select category"
-                    selected_category = st.selectbox(f"Category {index + 1}", options, index=options.index(current), key=f"fund_category_{index}", label_visibility="collapsed")
-                    entry["category"] = "" if selected_category == "Select category" else selected_category
-                else:
-                    entry["category"] = st.text_input(f"Category {index + 1}", value=entry["category"], key=f"fund_category_text_{index}", label_visibility="collapsed", placeholder="AdvisorKhoj category")
-        add_column, remove_column = st.columns(2)
-        with add_column:
-            if st.button("＋ Add fund", disabled=len(st.session_state.fund_entries) >= 10, use_container_width=True):
-                st.session_state.fund_entries.append({"name": "", "category": ""})
-                st.rerun()
-        with remove_column:
-            if st.button("− Remove last fund", disabled=len(st.session_state.fund_entries) <= 2, use_container_width=True):
-                st.session_state.fund_entries.pop()
-                st.rerun()
-
-    with right:
-        st.subheader("2. Set the period")
-        selected_period = st.radio("Analysis period", list(SUPPORTED_PERIODS.keys()), index=2)
-        st.info("AdvisorKhoj currently displays up to four funds in its own comparison form. This app queries each selected fund separately so reports can include up to ten.")
-        st.subheader("3. Generate your report")
-        st.write("A configured OpenAI-compatible API key is required for the AI explanations.")
-        generate = st.button("Generate report & prepare PDF", type="primary", use_container_width=True)
-
-    if generate:
-        clean_entries = [(entry["name"].strip(), entry["category"].strip()) for entry in st.session_state.fund_entries if entry["name"].strip()]
-        normalized_names = [normalize_name(name) for name, _ in clean_entries]
-        if not 2 <= len(clean_entries) <= 10:
-            st.error("Select between 2 and 10 funds before generating a report.")
-        elif len(set(normalized_names)) != len(normalized_names):
-            st.error("Duplicate fund names were found. Keep only unique funds.")
-        elif any(not category for _, category in clean_entries):
-            st.error("Choose an AdvisorKhoj category for every selected fund.")
-        elif selected_period not in SUPPORTED_PERIODS:
-            st.error("Choose one of the supported periods.")
-        else:
-            try:
-                with st.status("Generating your report…", expanded=True) as status:
-                    funds, ranking, analysis, pdf_bytes = run_report(clean_entries, selected_period)
-                    status.update(label="Report generated", state="complete", expanded=False)
-                st.success("The report was generated using retrieved source figures and validated AI output.")
-                st.subheader("Comparison preview")
-                st.write(analysis["overall_summary"])
-                preview = []
-                analysis_by_name = {item["scheme_name"]: item for item in analysis["funds"]}
-                for item in ranking:
-                    explanation = analysis_by_name[item["scheme_name"]]
-                    preview.append({
-                        "Rank": item["rank"],
-                        "Fund": item["scheme_name"],
-                        "Up capture (%)": item["up_capture_percent"],
-                        "Down capture (%)": item["down_capture_percent"],
-                        "Capture ratio": item["capture_ratio"],
-                        "Reason": explanation["reason"],
-                    })
-                st.dataframe(pd.DataFrame(preview), use_container_width=True, hide_index=True)
-                filename = f"mutual-fund-market-capture-{selected_period.replace(' ', '-')}-{datetime.now().strftime('%Y%m%d-%H%M%S')}.pdf"
-                st.download_button("Download PDF report", data=pdf_bytes, file_name=filename, mime="application/pdf", use_container_width=True)
+                categories = load_categories()
+                category_load_error = None
             except Exception as error:
-                st.error(str(error))
-                st.caption("No sample or fabricated report is substituted when source retrieval or AI analysis fails.")
+                categories = []
+                category_load_error = str(error)
+                st.warning("AdvisorKhoj category choices are temporarily unavailable. You can enter the exact category label manually below.")
+
+            for index, entry in enumerate(st.session_state.fund_entries):
+                with st.container(border=True):
+                    st.markdown(f'<div class="fr-section-kicker">Scheme {index + 1:02d}</div>', unsafe_allow_html=True)
+                    name_column, category_column = st.columns([1.25, 1], gap="medium")
+                    with name_column:
+                        entry["name"] = st.text_input(
+                            "Fund / scheme name",
+                            value=entry["name"],
+                            key=f"fund_name_{index}",
+                            placeholder="e.g. HDFC Large Cap Fund Dir Gr",
+                            help="Use Direct/Dir or Regular/Reg when multiple scheme variants exist.",
+                        ).strip()
+                    with category_column:
+                        if categories:
+                            options = ["Select category"] + categories
+                            current = entry["category"] if entry["category"] in categories else "Select category"
+                            selected_category = st.selectbox(
+                                "AdvisorKhoj category",
+                                options,
+                                index=options.index(current),
+                                key=f"fund_category_{index}",
+                                help="Choose the source category that contains this scheme.",
+                            )
+                            entry["category"] = "" if selected_category == "Select category" else selected_category
+                        else:
+                            entry["category"] = st.text_input(
+                                "AdvisorKhoj category",
+                                value=entry["category"],
+                                key=f"fund_category_text_{index}",
+                                placeholder="Exact category label",
+                            ).strip()
+
+            count_column, action_column = st.columns([1, 1], gap="small")
+            with count_column:
+                st.caption(f"{len(st.session_state.fund_entries)} scheme slots · maximum 10")
+            with action_column:
+                add_column, remove_column = st.columns(2, gap="small")
+                with add_column:
+                    if st.button("＋ Add scheme", disabled=len(st.session_state.fund_entries) >= 10, use_container_width=True):
+                        st.session_state.fund_entries.append({"name": "", "category": ""})
+                        st.rerun()
+                with remove_column:
+                    if st.button("− Remove last", disabled=len(st.session_state.fund_entries) <= 2, use_container_width=True):
+                        st.session_state.fund_entries.pop()
+                        st.rerun()
+
+    with settings_column:
+        with st.container(border=True):
+            st.markdown('<div class="fr-section-kicker">Step 02</div>', unsafe_allow_html=True)
+            st.subheader("Report settings")
+            selected_period = st.radio(
+                "Analysis period",
+                list(SUPPORTED_PERIODS.keys()),
+                index=2,
+                horizontal=True,
+                help="Every selected scheme is retrieved for the same period.",
+            )
+            st.divider()
+            st.markdown("**What the report includes**")
+            st.markdown(
+                "- Market-capture figures and each scheme's benchmark\n"
+                "- A deterministic order using capture ratio when available\n"
+                "- AI explanations validated against the selected schemes and ranks\n"
+                "- PDF with source links, retrieval timestamps and disclosures"
+            )
+            st.info("Benchmark and category differences matter. This report is a research aid, not personalized investment advice.")
+            st.markdown("**Required configuration**")
+            if os.getenv("OPENAI_API_KEY", "").strip():
+                st.markdown("✓ AI provider key detected in the local/hosting environment.")
+            else:
+                st.warning("AI analysis is not configured. Add OPENAI_API_KEY to the environment or local .env file.")
+            if st.button("Generate report & prepare PDF", type="primary", use_container_width=True):
+                clean_entries = [
+                    (entry["name"].strip(), entry["category"].strip())
+                    for entry in st.session_state.fund_entries
+                    if entry["name"].strip()
+                ]
+                normalized_names = [normalize_name(name) for name, _ in clean_entries]
+                if not 2 <= len(clean_entries) <= 10:
+                    st.error("Select between 2 and 10 funds before generating a report.")
+                elif len(set(normalized_names)) != len(normalized_names):
+                    st.error("Duplicate fund names were found. Keep only unique funds.")
+                elif any(not category for _, category in clean_entries):
+                    st.error("Choose an AdvisorKhoj category for every selected fund.")
+                elif len(clean_entries) != len(st.session_state.fund_entries):
+                    st.error("Fill in every scheme slot or remove unused slots before generating.")
+                elif selected_period not in SUPPORTED_PERIODS:
+                    st.error("Choose one of the supported periods.")
+                else:
+                    try:
+                        with st.status("Generating your report…", expanded=True) as status:
+                            funds, ranking, analysis, pdf_bytes = run_report(clean_entries, selected_period)
+                            status.update(label="Report generated", state="complete", expanded=False)
+                        st.session_state.last_report = {
+                            "funds": funds,
+                            "ranking": ranking,
+                            "analysis": analysis,
+                            "pdf_bytes": pdf_bytes,
+                            "period": selected_period,
+                            "generated_at": datetime.now().astimezone().strftime("%d %b %Y, %H:%M %Z"),
+                        }
+                        st.success("Report generated from retrieved source figures and validated AI output.")
+                    except Exception as error:
+                        st.error(str(error))
+                        st.caption("No sample or fabricated report is substituted when source retrieval or AI analysis fails.")
+
+    report = st.session_state.last_report
+    st.markdown("")
+    if report:
+        toolbar_left, toolbar_right = st.columns([0.72, 0.28], gap="medium")
+        with toolbar_left:
+            st.markdown('<div class="fr-section-kicker">Step 03 · Results</div>', unsafe_allow_html=True)
+            st.header("Comparison report")
+            st.caption(f"Last generated: {report['generated_at']} · Period: {report['period']} · {len(report['funds'])} schemes")
+        with toolbar_right:
+            st.markdown("<div style='height:1.65rem'></div>", unsafe_allow_html=True)
+            if st.button("Clear report", use_container_width=True):
+                st.session_state.last_report = None
+                st.rerun()
+
+        funds = report["funds"]
+        ranking = report["ranking"]
+        analysis = report["analysis"]
+        metric_columns = st.columns(4, gap="medium")
+        top_fund = ranking[0]["scheme_name"] if ranking else "—"
+        metric_values = [
+            ("Schemes compared", str(len(funds))),
+            ("Analysis period", report["period"]),
+            ("Highest-ranked scheme", top_fund),
+            ("Verified source rows", f"{len(funds)} of {len(funds)}"),
+        ]
+        for column, (label, value) in zip(metric_columns, metric_values):
+            with column:
+                with st.container(border=True):
+                    st.caption(label)
+                    st.markdown(f"<div style='font-size:1.05rem;font-weight:750;color:#123a4a;overflow-wrap:anywhere'>{safe_paragraph(value)}</div>", unsafe_allow_html=True)
+
+        st.markdown("")
+        with st.container(border=True):
+            st.subheader("Executive summary")
+            st.write(analysis["overall_summary"])
+            st.caption("Ranks are calculated by the application. AI explanations describe the retrieved data and are not allowed to change the rank order.")
+
+        st.subheader("Ranking and market-capture metrics")
+        preview = build_comparison_preview(funds, ranking)
+        st.dataframe(
+            preview,
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                "Rank": st.column_config.NumberColumn("Rank", format="%d"),
+                "Up-market capture (%)": st.column_config.NumberColumn("Up-market capture (%)", format="%.2f"),
+                "Down-market capture (%)": st.column_config.NumberColumn("Down-market capture (%)", format="%.2f"),
+                "Capture ratio": st.column_config.NumberColumn("Capture ratio", format="%.2f"),
+            },
+        )
+        st.caption("Rows are ordered by capture ratio where available; if unavailable, the documented fallback score is up-capture minus down-capture. Benchmark differences can limit direct comparability.")
+
+        chart_column, notes_column = st.columns([1.15, 0.85], gap="large")
+        with chart_column:
+            with st.container(border=True):
+                st.subheader("Upside and downside participation")
+                chart_data = preview.set_index("Fund")[["Up-market capture (%)", "Down-market capture (%)"]]
+                st.bar_chart(chart_data, use_container_width=True, height=320)
+                st.caption("Percentages are source-reported market-capture metrics, not fund returns.")
+        with notes_column:
+            with st.container(border=True):
+                st.subheader("How to read these figures")
+                st.markdown(
+                    "- **Up-market capture:** participation in rising benchmark periods.\n"
+                    "- **Down-market capture:** participation in falling benchmark periods.\n"
+                    "- **Capture ratio:** AdvisorKhoj’s reported ratio; the app uses this for the primary ranking when available."
+                )
+                st.caption("This ranking is one comparison lens, not an investment suitability model.")
+
+        st.subheader("AI analysis by scheme")
+        analyses_by_name = {item["scheme_name"]: item for item in analysis["funds"]}
+        for item in ranking:
+            fund_analysis = analyses_by_name[item["scheme_name"]]
+            fund = next(fund for fund in funds if fund.scheme_name == item["scheme_name"])
+            with st.expander(f"Rank {item['rank']} · {item['scheme_name']}", expanded=(item["rank"] == 1)):
+                st.caption(f"{fund.category} · Benchmark: {fund.benchmark_name} · {report['period']}")
+                st.markdown("**Why this rank**")
+                st.write(fund_analysis["reason"])
+                strengths = fund_analysis["strengths"]
+                limitations = fund_analysis["limitations"]
+                if isinstance(strengths, list):
+                    strengths = "; ".join(str(value) for value in strengths)
+                if isinstance(limitations, list):
+                    limitations = "; ".join(str(value) for value in limitations)
+                strength_column, limitation_column = st.columns(2, gap="medium")
+                with strength_column:
+                    st.markdown("**Strengths noted**")
+                    st.write(strengths)
+                with limitation_column:
+                    st.markdown("**Limitations to keep in mind**")
+                    st.write(limitations)
+
+        st.markdown("")
+        download_column, provenance_column = st.columns([1, 1.25], gap="large")
+        with download_column:
+            with st.container(border=True):
+                st.subheader("Download report")
+                st.write("PDF includes the comparison, AI explanations, source links, retrieval timestamps and disclaimer.")
+                filename = f"mutual-fund-market-capture-{report['period'].replace(' ', '-')}-{datetime.now().strftime('%Y%m%d-%H%M%S')}.pdf"
+                st.download_button(
+                    "↓ Download PDF report",
+                    data=report["pdf_bytes"],
+                    file_name=filename,
+                    mime="application/pdf",
+                    use_container_width=True,
+                    type="primary",
+                )
+        with provenance_column:
+            with st.container(border=True):
+                st.subheader("Data provenance")
+                st.caption("Figures are retrieved live for this report. Open each source page to review the captured row.")
+                for fund in funds:
+                    st.markdown(f"**{safe_paragraph(fund.scheme_name)}**")
+                    st.markdown(f"[Open AdvisorKhoj source page]({fund.source_url})")
+                    st.caption(f"Benchmark: {fund.benchmark_name} · Retrieved at {fund.retrieved_at}")
+    else:
+        with st.container(border=True):
+            st.markdown('<div class="fr-section-kicker">Step 03 · Results</div>', unsafe_allow_html=True)
+            st.subheader("Your comparison will appear here")
+            st.markdown(
+                "After you generate a report, this area shows the verified source figures, "
+                "deterministic ranking, AI notes, comparison chart and PDF download."
+            )
+            st.caption("No sample fund values are shown in the empty state.")
+
+    st.markdown(
+        """
+        <div class="fr-footer">
+          <strong>Data and risk note</strong><br/>
+          Market-capture metrics describe historical participation relative to a benchmark. They are not fund returns and do not guarantee future outcomes. This tool provides educational information, not individualized investment advice.
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 if __name__ == "__main__":
