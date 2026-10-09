@@ -84,7 +84,9 @@ The source page is interactive. The scraper queries the scheme-suggestion endpoi
 
 ## Ranking and AI safeguards
 
-The app orders funds using the source capture ratio when available. If that ratio is missing, it uses up capture minus down capture as a transparent fallback score. This is a simple comparison heuristic, not an investment suitability model. The LLM is asked to explain the existing deterministic order rather than set or change ranks. Its response is checked for complete fund coverage and ranking consistency before the PDF is generated.
+The app requires the source's Capture Ratio for every selected fund; it does not mix that ratio with a fallback score on a different scale. If a ratio is missing, report generation stops with an actionable error. Ranking uses the reported Capture Ratio with the following explicit ordering: negative ratios are placed first only when the source up-capture is non-negative and down-capture is negative (the source identifies that case as potentially favourable); other non-negative ratios follow from high to low; other negative ratios follow them. This is a simple, disclosed comparison heuristic, not an investment suitability model or return forecast. Benchmark/category differences can still make cross-fund comparisons less direct.
+
+The LLM is asked to explain the existing deterministic order rather than set or change ranks. The response validator checks the top-level JSON shape, fund coverage, item structure, and rank consistency before the PDF is generated. Model-generated strings are HTML-escaped before being rendered into ReportLab paragraphs. Canonical schemes are checked for duplicates after resolution as well as validating the names entered in the form.
 
 ## Deployment
 
@@ -92,21 +94,24 @@ A Render blueprint is included in `render.yaml`. To deploy:
 
 1. Push this repository to GitHub.
 2. Create a new Render Blueprint deployment from the repository.
-3. Set `OPENAI_API_KEY` in Render's environment settings.
-4. Confirm the selected plan and any possible charges before deploying.
-5. Open the public URL and test source retrieval, AI analysis, and PDF download with real data.
+3. Set `OPENAI_API_KEY` and the intended `OPENAI_MODEL` in Render's environment settings.
+4. Set `OPENAI_BASE_URL` to an AI endpoint reachable from Render. Do not use a local-only `localhost` URL for FreeLLMAPI; from a hosted container it would point back to that container, not your PC.
+5. Confirm the selected plan and any possible charges before deploying.
+6. Confirm whether the source retrieval arrangement is authorized for the intended use, then open the public URL and test source retrieval, AI analysis, access controls, and PDF download with real data. Do not expose a provider key through an unrestricted public endpoint.
 
 The blueprint installs Python dependencies without a browser binary. Hosting plan limits, outbound requests, source availability, and request execution time must still be validated in the actual deployment. No live URL is claimed by this repository until a public deployment has been completed and checked.
 
 ## Known limitations before production use
 
-- The full local workflow was confirmed before the latest presentation changes; run the updated tests and regenerate a PDF after pulling this branch to verify the redesigned result area and provenance layout.
+- The financial ranking policy, AI output escaping, duplicate canonical scheme check, and report-result state safeguards were recently tightened; run the newest tests and generate a fresh PDF before accepting those changes.
+- Live source retrieval depends on an undocumented website page/endpoint and HTML table structure. The site's current terms state that use of its service is subject to the terms and that website elements are copyrighted; permission or a suitable official interface should be confirmed before sustained/commercial use.
 - Generic names that match multiple source variants must be made explicit (for example, Direct Growth vs Regular Growth).
 - The current source interface's available categories and period labels may change.
 - There is no official AdvisorKhoj API credential configured in this project.
-- LLM availability and cost depend on the configured provider and account.
+- A free/public AI endpoint may have quotas and limitations; hosted inference must be reachable from the deployment environment.
 - No genuine sample report is checked in because one must be generated from live, retrieved figures.
 - The app is informational and does not provide individualized financial advice.
+- The latest full test and visual regression run is still pending.
 
 ## Financial disclaimer
 
