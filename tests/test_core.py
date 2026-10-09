@@ -7,6 +7,7 @@ import pytest
 from app import (
     FundCaptureData,
     build_pdf,
+    build_comparison_preview,
     column_for,
     fetch_advisorkhoj_suggestions,
     deterministic_score,
@@ -80,6 +81,24 @@ def test_rank_funds_uses_capture_ratio_and_preserves_unique_funds():
     ranking = rank_funds(funds)
     assert [item["scheme_name"] for item in ranking] == ["Fund One", "Fund Two"]
     assert [item["rank"] for item in ranking] == [1, 2]
+
+
+def test_build_comparison_preview_keeps_rank_order_and_benchmarks():
+    fund_one = make_fund("Fund One", 105, 90, 1.16)
+    fund_two = replace(
+        make_fund("Fund Two", 98, 95, 1.03),
+        category="Equity: Flexi Cap",
+        benchmark_name="Nifty 500 TRI",
+    )
+    ranking = rank_funds([fund_two, fund_one])
+
+    preview = build_comparison_preview([fund_one, fund_two], ranking)
+
+    assert preview["Fund"].tolist() == ["Fund One", "Fund Two"]
+    assert preview["Rank"].tolist() == [1, 2]
+    assert preview["Benchmark"].tolist() == ["Example Benchmark", "Nifty 500 TRI"]
+    assert preview["Category"].tolist() == ["Equity: Large Cap", "Equity: Flexi Cap"]
+    assert preview.iloc[0]["Capture ratio"] == 1.16
 
 
 def test_build_pdf_returns_pdf_bytes_with_source_data():
