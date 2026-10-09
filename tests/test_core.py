@@ -1,3 +1,4 @@
+from dataclasses import replace
 from unittest.mock import Mock
 
 import pandas as pd
@@ -92,6 +93,30 @@ def test_build_pdf_returns_pdf_bytes_with_source_data():
         ],
     }
     result = build_pdf(funds, ranking, analysis, "5 years")
+    assert result.startswith(b"%PDF")
+    assert len(result) > 1000
+
+
+def test_build_pdf_handles_provenance_ampersands_and_long_source_url():
+    fund = replace(
+        make_fund("Fund One", 105, 90, 1.16),
+        amc_name="Example & Associates",
+        benchmark_name="Example Benchmark",
+        source_url=(
+            "https://www.advisorkhoj.com/mutual-funds-research/market-capture-ratio"
+            "?PageSpeed=noscript&category=Equity%3A+Large+Cap&schemes=Fund+One&period=5"
+        ),
+    )
+    ranking = rank_funds([fund])
+    analysis = {
+        "overall_summary": "The fund has a source record.",
+        "funds": [
+            {"scheme_name": "Fund One", "rank": 1, "reason": "Example reason.", "strengths": ["Example strength"], "limitations": ["Example limitation"]},
+        ],
+    }
+
+    result = build_pdf([fund], ranking, analysis, "5 years")
+
     assert result.startswith(b"%PDF")
     assert len(result) > 1000
 
