@@ -293,13 +293,39 @@ def fetch_one_fund(requested_name: str, category: str, period: str) -> FundCaptu
 
 
 def deterministic_score(fund: FundCaptureData) -> float:
-    if fund.capture_ratio is not None:
-        return fund.capture_ratio
-    return (fund.up_capture_percent or 0.0) - (fund.down_capture_percent or 0.0)
+    """Return the source capture ratio; never mix it with a different fallback metric."""
+    if fund.capture_ratio is None:
+        raise ValueError(
+            f"Cannot rank '{fund.scheme_name}' because AdvisorKhoj did not provide a Capture Ratio. "
+            "The report was stopped rather than ranking this fund using a different metric."
+        )
+    return fund.capture_ratio
+
+
+def ranking_order_key(fund: FundCaptureData) -> tuple[int, float]:
+    """Apply a documented source-informed order for positive and negative capture ratios."""
+    score = deterministic_score(fund)
+    up_capture = fund.up_capture_percent
+    down_capture = fund.down_capture_percent
+
+    # AdvisorKhoj notes that a negative ratio can be favourable when it is caused by
+    # negative down-market capture (with non-negative up-market capture). Order these
+    # first, putting more negative ratios first; other negative ratios are not treated
+    # as favourable just because they are negative.
+    if score < 0 and down_capture is not None and down_capture < 0 and up_capture is not None and up_capture >= 0:
+        return (0, score)
+
+    # For ordinary non-negative capture ratios, larger ratios come first.
+    if score >= 0 and (up_capture is None or up_capture >= 0) and (down_capture is None or down_capture >= 0):
+        return (1, -score)
+
+    # A negative ratio not explained by negative down-market capture is placed after
+    # the ordinary non-negative ratios; retain deterministic ordering within this group.
+    return (2, -score)
 
 
 def rank_funds(funds: list[FundCaptureData]) -> list[dict[str, Any]]:
-    ranked = sorted(funds, key=deterministic_score, reverse=True)
+    ranked = sorted(funds, key=ranking_order_key)
     return [
         {
             "rank": index,
@@ -311,6 +337,19 @@ def rank_funds(funds: list[FundCaptureData]) -> list[dict[str, Any]]:
         }
         for index, fund in enumerate(ranked, start=1)
     ]
+
+
+def validate_unique_resolved_schemes(funds: list[FundCaptureData]) -> None:
+    """Reject different input labels that resolve to the same canonical source scheme."""
+    seen: set[str] = set()
+    for fund in funds:
+        normalized = normalize_name(fund.scheme_name)
+        if normalized in seen:
+            raise ValueError(
+                f"Multiple fund inputs resolved to the same AdvisorKhoj scheme "
+                f"'{fund.scheme_name}'. Remove the duplicate before generating a report."
+            )
+        seen.add(normalized)
 
 
 def request_ai_analysis(funds: list[FundCaptureData], ranking: list[dict[str, Any]], period: str) -> dict[str, Any]:
@@ -357,10 +396,14 @@ def request_ai_analysis(funds: list[FundCaptureData], ranking: list[dict[str, An
         raise RuntimeError("The AI provider returned an invalid analysis response.") from error
     expected = {fund.scheme_name for fund in funds}
     actual_funds = result.get("funds")
+    if not isinstance(result, dict):
+        raise RuntimeError("The AI provider returned a JSON value that is not an analysis object.")
     if not isinstance(actual_funds, list):
         raise RuntimeError("The AI response did not contain a valid fund analysis list.")
-    actual_names = [item.get("scheme_name") for item in actual_funds if isinstance(item, dict)]
-    if len(actual_names) != len(expected) or set(actual_names) != expected:
+    if any(not isinstance(item, dict) for item in actual_funds):
+        raise RuntimeError("The AI response contained a malformed fund analysis item.")
+    actual_names = [item.get("scheme_name") for item in actual_funds]
+    if len(actual_funds) != len(expected) or len(actual_names) != len(expected) or set(actual_names) != expected:
         raise RuntimeError("The AI response omitted, duplicated, or changed a selected fund.")
     expected_ranks = {item["scheme_name"]: item["rank"] for item in ranking}
     for item in actual_funds:
@@ -405,13 +448,13 @@ def build_pdf(funds: list[FundCaptureData], ranking: list[dict[str, Any]], analy
         Paragraph("Funds analyzed", styles["SectionTitle"]),
     ]
     for fund in funds:
-        story.append(Paragraph(f"• {fund.scheme_name} — {fund.category}", styles["BodyText"]))
+        story.append(Paragraph(f"• {safe_paragraph(fund.scheme_name)} — {safe_paragraph(fund.category)}", styles["BodyText"]))
     story.extend([Spacer(1, 5 * mm), Paragraph("Ranking overview", styles["SectionTitle"])])
     table_rows = [["Rank", "Fund", "Up capture", "Down capture", "Capture ratio"]]
     for item in ranking:
         table_rows.append([
             str(item["rank"]),
-            Paragraph(str(item["scheme_name"]), styles["SmallBody"]),
+            Paragraph(safe_paragraph(item["scheme_name"]), styles["SmallBody"]),
             "—" if item["up_capture_percent"] is None else f'{item["up_capture_percent"]:.2f}%',
             "—" if item["down_capture_percent"] is None else f'{item["down_capture_percent"]:.2f}%',
             "—" if item["capture_ratio"] is None else f'{item["capture_ratio"]:.2f}',
@@ -430,20 +473,33 @@ def build_pdf(funds: list[FundCaptureData], ranking: list[dict[str, Any]], analy
         ("TOPPADDING", (0, 0), (-1, -1), 6),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
     ]))
-    story.extend([ranking_table, Paragraph("Overall summary", styles["SectionTitle"]), Paragraph(analysis["overall_summary"], styles["BodyText"])])
+    story.extend([ranking_table, Paragraph("Overall summary", styles["SectionTitle"]), Paragraph(safe_paragraph(analysis["overall_summary"]), styles["BodyText"])])
+    story.extend([
+        Paragraph("Ranking methodology", styles["SectionTitle"]),
+        Paragraph(
+            safe_paragraph(
+                "Funds are ordered using AdvisorKhoj’s reported Capture Ratio. A negative ratio is placed first "
+                "only when it results from negative down-market capture with non-negative up-market capture; "
+                "other non-negative ratios follow from highest to lowest, and other negative ratios follow them. "
+                "A missing source Capture Ratio stops report generation rather than using a different metric. "
+                "Benchmark and category differences still limit direct comparisons."
+            ),
+            styles["SmallBody"],
+        ),
+    ])
     analysis_by_name = {item["scheme_name"]: item for item in analysis["funds"]}
     for item in ranking:
         explanation = analysis_by_name[item["scheme_name"]]
-        story.append(Paragraph(f"Rank {item['rank']}: {item['scheme_name']}", styles["SectionTitle"]))
-        story.append(Paragraph(f"<b>Reason:</b> {str(explanation['reason'])}", styles["BodyText"]))
+        story.append(Paragraph(f"Rank {item['rank']}: {safe_paragraph(item['scheme_name'])}", styles["SectionTitle"]))
+        story.append(Paragraph(f"<b>Reason:</b> {safe_paragraph(explanation['reason'])}", styles["BodyText"]))
         strengths = explanation["strengths"]
         limitations = explanation["limitations"]
         if isinstance(strengths, list):
             strengths = "; ".join(str(item) for item in strengths)
         if isinstance(limitations, list):
             limitations = "; ".join(str(item) for item in limitations)
-        story.append(Paragraph(f"<b>Strengths:</b> {str(strengths)}", styles["BodyText"]))
-        story.append(Paragraph(f"<b>Limitations:</b> {str(limitations)}", styles["BodyText"]))
+        story.append(Paragraph(f"<b>Strengths:</b> {safe_paragraph(strengths)}", styles["BodyText"]))
+        story.append(Paragraph(f"<b>Limitations:</b> {safe_paragraph(limitations)}", styles["BodyText"]))
     story.append(Paragraph("Source figures and provenance", styles["SectionTitle"]))
     for index, fund in enumerate(funds, start=1):
         scheme_title = Paragraph(
@@ -549,6 +605,7 @@ def run_report(requested_funds: list[tuple[str, str]], period: str) -> tuple[lis
     for index, (name, category) in enumerate(requested_funds, start=1):
         st.write(f"Retrieving AdvisorKhoj figures for {index} of {len(requested_funds)}: {name}")
         funds.append(fetch_one_fund(name, category, period))
+    validate_unique_resolved_schemes(funds)
     ranking = rank_funds(funds)
     analysis = request_ai_analysis(funds, ranking, period)
     pdf_bytes = build_pdf(funds, ranking, analysis, period)
@@ -854,6 +911,9 @@ def main() -> None:
             else:
                 st.warning("AI analysis is not configured. Add OPENAI_API_KEY to the environment or local .env file.")
             if st.button("Generate report & prepare PDF", type="primary", use_container_width=True):
+                # Clear the previous result immediately so a failed new attempt cannot
+                # leave stale values visible beside an error message.
+                st.session_state.last_report = None
                 clean_entries = [
                     (entry["name"].strip(), entry["category"].strip())
                     for entry in st.session_state.fund_entries
@@ -938,7 +998,7 @@ def main() -> None:
                 "Capture ratio": st.column_config.NumberColumn("Capture ratio", format="%.2f"),
             },
         )
-        st.caption("Rows are ordered by capture ratio where available; if unavailable, the documented fallback score is up-capture minus down-capture. Benchmark differences can limit direct comparability.")
+        st.caption("Ranks use the source capture ratio only; if it is missing, report generation stops instead of mixing metrics. A negative ratio is treated as favourable only when caused by negative down-market capture and non-negative up-market capture. Benchmark differences can limit direct comparability.")
 
         chart_column, notes_column = st.columns([1.15, 0.85], gap="large")
         with chart_column:
