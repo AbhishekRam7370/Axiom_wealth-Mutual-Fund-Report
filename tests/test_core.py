@@ -6,6 +6,7 @@ import pytest
 from app import (
     FundCaptureData,
     build_pdf,
+    column_for,
     fetch_advisorkhoj_suggestions,
     deterministic_score,
     identify_capture_table,
@@ -187,3 +188,19 @@ def test_fetch_advisorkhoj_suggestions_rejects_no_search_results():
             "https://www.advisorkhoj.com/mutual-funds-research/market-capture-ratio?PageSpeed=noscript",
             session=session,
         )
+
+
+def test_column_for_prefers_exact_capture_ratio_header():
+    table = pd.DataFrame(
+        {
+            "Scheme Name": ["Parag Parikh Flexi Cap Dir Gr"],
+            "Up Market Capture Ratio (%)": [77.0],
+            "Down Market Capture Ratio (%)": [58.0],
+            "Capture Ratio": [1.33],
+        }
+    )
+
+    assert column_for(table, "up market capture ratio") == "Up Market Capture Ratio (%)"
+    assert column_for(table, "down market capture ratio") == "Down Market Capture Ratio (%)"
+    assert column_for(table, "capture ratio") == "Capture Ratio"
+    assert table.iloc[0][column_for(table, "capture ratio")] == 1.33
