@@ -905,7 +905,7 @@ def main() -> None:
             ("Schemes compared", str(len(funds))),
             ("Analysis period", report["period"]),
             ("Highest-ranked scheme", top_fund),
-            ("Verified source rows", f"{len(funds)} of {len(funds)}"),
+            ("Source rows retrieved", str(len(funds))),
         ]
         for column, (label, value) in zip(metric_columns, metric_values):
             with column:
