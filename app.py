@@ -6,6 +6,7 @@ import time
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from typing import Any
+from xml.sax.saxutils import escape
 
 import pandas as pd
 import requests
@@ -19,7 +20,6 @@ from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import mm
 from reportlab.platypus import (
-    PageBreak,
     Paragraph,
     SimpleDocTemplate,
     Spacer,
@@ -468,115 +468,125 @@ def run_report(requested_funds: list[tuple[str, str]], period: str) -> tuple[lis
     return funds, ranking, analysis, pdf_bytes
 
 
-st.set_page_config(page_title="Fund Report | Market Capture Intelligence", page_icon="📊", layout="wide")
-st.markdown(
-    """
-    <style>
-    .stApp { background: #f5f7fb; }
-    .block-container { max-width: 1120px; padding-top: 2rem; }
-    .hero { padding: 1.7rem 2rem; border-radius: 18px; background: linear-gradient(120deg,#14324a,#246b78); color: white; margin-bottom: 1.5rem; }
-    .hero h1 { color: white; margin-bottom: .4rem; }
-    .hero p { color: #e5f0f4; font-size: 1.05rem; }
-    </style>
-    <div class="hero">
-      <h1>Fund Report</h1>
-      <p>Compare mutual funds using AdvisorKhoj market capture figures and evidence-based AI explanations.</p>
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
 
-if "fund_entries" not in st.session_state:
-    st.session_state.fund_entries = [{"name": "", "category": ""} for _ in range(2)]
+def safe_paragraph(value: Any) -> str:
+    return escape(str(value))
 
-with st.expander("How this report works", expanded=False):
-    st.write("The application retrieves each fund's figures from AdvisorKhoj, calculates a deterministic comparison order, and asks the configured language model to explain the evidence. Missing source figures stop report generation instead of being invented.")
-    st.caption("Market capture ratios are only one comparison lens. This report is educational and is not individualized investment advice.")
 
-left, right = st.columns([1.2, 0.8], gap="large")
-with left:
-    st.subheader("1. Choose your funds")
-    st.write("Select 2–10 unique funds. Each fund can use its own AdvisorKhoj category.")
-    pasted_names = st.text_area("Paste fund names (one per line, or comma-separated)", height=100, placeholder="HDFC Large Cap Fund\nMirae Asset Large Cap Fund")
-    if st.button("Fill fund fields from pasted list", use_container_width=True):
+def main() -> None:
+    st.set_page_config(page_title="Fund Report | Market Capture Intelligence", page_icon="📊", layout="wide")
+    st.markdown(
+        """
+        <style>
+        .stApp { background: #f5f7fb; }
+        .block-container { max-width: 1120px; padding-top: 2rem; }
+        .hero { padding: 1.7rem 2rem; border-radius: 18px; background: linear-gradient(120deg,#14324a,#246b78); color: white; margin-bottom: 1.5rem; }
+        .hero h1 { color: white; margin-bottom: .4rem; }
+        .hero p { color: #e5f0f4; font-size: 1.05rem; }
+        </style>
+        <div class="hero">
+          <h1>Fund Report</h1>
+          <p>Compare mutual funds using AdvisorKhoj market capture figures and evidence-based AI explanations.</p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    if "fund_entries" not in st.session_state:
+        st.session_state.fund_entries = [{"name": "", "category": ""} for _ in range(2)]
+
+    with st.expander("How this report works", expanded=False):
+        st.write("The application retrieves each fund's figures from AdvisorKhoj, calculates a deterministic comparison order, and asks the configured language model to explain the evidence. Missing source figures stop report generation instead of being invented.")
+        st.caption("Market capture ratios are only one comparison lens. This report is educational and is not individualized investment advice.")
+
+    left, right = st.columns([1.2, 0.8], gap="large")
+    with left:
+        st.subheader("1. Choose your funds")
+        st.write("Select 2–10 unique funds. Each fund can use its own AdvisorKhoj category.")
+        pasted_names = st.text_area("Paste fund names (one per line, or comma-separated)", height=100, placeholder="HDFC Large Cap Fund\nMirae Asset Large Cap Fund")
+        if st.button("Fill fund fields from pasted list", use_container_width=True):
+            try:
+                names = parse_fund_names(pasted_names)
+                st.session_state.fund_entries = [{"name": name, "category": ""} for name in names]
+                st.rerun()
+            except ValueError as error:
+                st.error(str(error))
         try:
-            names = parse_fund_names(pasted_names)
-            st.session_state.fund_entries = [{"name": name, "category": ""} for name in names]
-            st.rerun()
-        except ValueError as error:
-            st.error(str(error))
-    try:
-        categories = st.cache_data(ttl=3600, show_spinner=False)(load_categories)()
-    except Exception:
-        categories = []
-        st.warning("AdvisorKhoj category options could not be loaded right now. Refresh later; categories are not guessed.")
-    if not categories:
-        categories = []
-    for index, entry in enumerate(st.session_state.fund_entries):
-        st.markdown(f"**Fund {index + 1}**")
-        name_column, category_column = st.columns([1.5, 1])
-        with name_column:
-            entry["name"] = st.text_input(f"Fund name {index + 1}", value=entry["name"], key=f"fund_name_{index}", label_visibility="collapsed", placeholder="Search or enter exact fund name")
-        with category_column:
-            if categories:
-                options = ["Select category"] + categories
-                current = entry["category"] if entry["category"] in categories else "Select category"
-                selected_category = st.selectbox(f"Category {index + 1}", options, index=options.index(current), key=f"fund_category_{index}", label_visibility="collapsed")
-                entry["category"] = "" if selected_category == "Select category" else selected_category
-            else:
-                entry["category"] = st.text_input(f"Category {index + 1}", value=entry["category"], key=f"fund_category_text_{index}", label_visibility="collapsed", placeholder="AdvisorKhoj category")
-    add_column, remove_column = st.columns(2)
-    with add_column:
-        if st.button("＋ Add fund", disabled=len(st.session_state.fund_entries) >= 10, use_container_width=True):
-            st.session_state.fund_entries.append({"name": "", "category": ""})
-            st.rerun()
-    with remove_column:
-        if st.button("− Remove last fund", disabled=len(st.session_state.fund_entries) <= 2, use_container_width=True):
-            st.session_state.fund_entries.pop()
-            st.rerun()
+            categories = st.cache_data(ttl=3600, show_spinner=False)(load_categories)()
+        except Exception:
+            categories = []
+            st.warning("AdvisorKhoj category options could not be loaded right now. Refresh later; categories are not guessed.")
+        if not categories:
+            categories = []
+        for index, entry in enumerate(st.session_state.fund_entries):
+            st.markdown(f"**Fund {index + 1}**")
+            name_column, category_column = st.columns([1.5, 1])
+            with name_column:
+                entry["name"] = st.text_input(f"Fund name {index + 1}", value=entry["name"], key=f"fund_name_{index}", label_visibility="collapsed", placeholder="Search or enter exact fund name")
+            with category_column:
+                if categories:
+                    options = ["Select category"] + categories
+                    current = entry["category"] if entry["category"] in categories else "Select category"
+                    selected_category = st.selectbox(f"Category {index + 1}", options, index=options.index(current), key=f"fund_category_{index}", label_visibility="collapsed")
+                    entry["category"] = "" if selected_category == "Select category" else selected_category
+                else:
+                    entry["category"] = st.text_input(f"Category {index + 1}", value=entry["category"], key=f"fund_category_text_{index}", label_visibility="collapsed", placeholder="AdvisorKhoj category")
+        add_column, remove_column = st.columns(2)
+        with add_column:
+            if st.button("＋ Add fund", disabled=len(st.session_state.fund_entries) >= 10, use_container_width=True):
+                st.session_state.fund_entries.append({"name": "", "category": ""})
+                st.rerun()
+        with remove_column:
+            if st.button("− Remove last fund", disabled=len(st.session_state.fund_entries) <= 2, use_container_width=True):
+                st.session_state.fund_entries.pop()
+                st.rerun()
 
-with right:
-    st.subheader("2. Set the period")
-    selected_period = st.radio("Analysis period", list(SUPPORTED_PERIODS.keys()), index=2)
-    st.info("AdvisorKhoj currently displays up to four funds in its own comparison form. This app queries each selected fund separately so reports can include up to ten.")
-    st.subheader("3. Generate your report")
-    st.write("A configured OpenAI-compatible API key is required for the AI explanations.")
-    generate = st.button("Generate report & prepare PDF", type="primary", use_container_width=True)
+    with right:
+        st.subheader("2. Set the period")
+        selected_period = st.radio("Analysis period", list(SUPPORTED_PERIODS.keys()), index=2)
+        st.info("AdvisorKhoj currently displays up to four funds in its own comparison form. This app queries each selected fund separately so reports can include up to ten.")
+        st.subheader("3. Generate your report")
+        st.write("A configured OpenAI-compatible API key is required for the AI explanations.")
+        generate = st.button("Generate report & prepare PDF", type="primary", use_container_width=True)
 
-if generate:
-    clean_entries = [(entry["name"].strip(), entry["category"].strip()) for entry in st.session_state.fund_entries if entry["name"].strip()]
-    normalized_names = [normalize_name(name) for name, _ in clean_entries]
-    if not 2 <= len(clean_entries) <= 10:
-        st.error("Select between 2 and 10 funds before generating a report.")
-    elif len(set(normalized_names)) != len(normalized_names):
-        st.error("Duplicate fund names were found. Keep only unique funds.")
-    elif any(not category for _, category in clean_entries):
-        st.error("Choose an AdvisorKhoj category for every selected fund.")
-    elif selected_period not in SUPPORTED_PERIODS:
-        st.error("Choose one of the supported periods.")
-    else:
-        try:
-            with st.status("Generating your report…", expanded=True) as status:
-                funds, ranking, analysis, pdf_bytes = run_report(clean_entries, selected_period)
-                status.update(label="Report generated", state="complete", expanded=False)
-            st.success("The report was generated using retrieved source figures and validated AI output.")
-            st.subheader("Comparison preview")
-            st.write(analysis["overall_summary"])
-            preview = []
-            analysis_by_name = {item["scheme_name"]: item for item in analysis["funds"]}
-            for item in ranking:
-                explanation = analysis_by_name[item["scheme_name"]]
-                preview.append({
-                    "Rank": item["rank"],
-                    "Fund": item["scheme_name"],
-                    "Up capture (%)": item["up_capture_percent"],
-                    "Down capture (%)": item["down_capture_percent"],
-                    "Capture ratio": item["capture_ratio"],
-                    "Reason": explanation["reason"],
-                })
-            st.dataframe(pd.DataFrame(preview), use_container_width=True, hide_index=True)
-            filename = f"mutual-fund-market-capture-{selected_period.replace(' ', '-')}-{datetime.now().strftime('%Y%m%d-%H%M%S')}.pdf"
-            st.download_button("Download PDF report", data=pdf_bytes, file_name=filename, mime="application/pdf", use_container_width=True)
-        except Exception as error:
-            st.error(str(error))
-            st.caption("No sample or fabricated report is substituted when source retrieval or AI analysis fails.")
+    if generate:
+        clean_entries = [(entry["name"].strip(), entry["category"].strip()) for entry in st.session_state.fund_entries if entry["name"].strip()]
+        normalized_names = [normalize_name(name) for name, _ in clean_entries]
+        if not 2 <= len(clean_entries) <= 10:
+            st.error("Select between 2 and 10 funds before generating a report.")
+        elif len(set(normalized_names)) != len(normalized_names):
+            st.error("Duplicate fund names were found. Keep only unique funds.")
+        elif any(not category for _, category in clean_entries):
+            st.error("Choose an AdvisorKhoj category for every selected fund.")
+        elif selected_period not in SUPPORTED_PERIODS:
+            st.error("Choose one of the supported periods.")
+        else:
+            try:
+                with st.status("Generating your report…", expanded=True) as status:
+                    funds, ranking, analysis, pdf_bytes = run_report(clean_entries, selected_period)
+                    status.update(label="Report generated", state="complete", expanded=False)
+                st.success("The report was generated using retrieved source figures and validated AI output.")
+                st.subheader("Comparison preview")
+                st.write(analysis["overall_summary"])
+                preview = []
+                analysis_by_name = {item["scheme_name"]: item for item in analysis["funds"]}
+                for item in ranking:
+                    explanation = analysis_by_name[item["scheme_name"]]
+                    preview.append({
+                        "Rank": item["rank"],
+                        "Fund": item["scheme_name"],
+                        "Up capture (%)": item["up_capture_percent"],
+                        "Down capture (%)": item["down_capture_percent"],
+                        "Capture ratio": item["capture_ratio"],
+                        "Reason": explanation["reason"],
+                    })
+                st.dataframe(pd.DataFrame(preview), use_container_width=True, hide_index=True)
+                filename = f"mutual-fund-market-capture-{selected_period.replace(' ', '-')}-{datetime.now().strftime('%Y%m%d-%H%M%S')}.pdf"
+                st.download_button("Download PDF report", data=pdf_bytes, file_name=filename, mime="application/pdf", use_container_width=True)
+            except Exception as error:
+                st.error(str(error))
+                st.caption("No sample or fabricated report is substituted when source retrieval or AI analysis fails.")
+
+
+if __name__ == "__main__":
+    main()
