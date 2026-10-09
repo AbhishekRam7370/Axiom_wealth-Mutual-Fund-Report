@@ -15,6 +15,7 @@ from app import (
     parse_fund_names,
     parse_numeric,
     rank_funds,
+    request_ai_analysis,
     resolve_advisorkhoj_url,
     select_scheme_suggestion,
     run_report,
@@ -175,6 +176,51 @@ def test_build_pdf_handles_provenance_ampersands_and_long_source_url():
 
     assert result.startswith(b"%PDF")
     assert len(result) > 1000
+
+
+def test_request_ai_analysis_requires_api_key(monkeypatch):
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+
+    with pytest.raises(RuntimeError, match="AI analysis is not configured"):
+        request_ai_analysis([], [], "5 years")
+
+
+def test_request_ai_analysis_rejects_non_object_json(monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    mock_response = Mock()
+    mock_response.status_code = 200
+    mock_response.json.return_value = {"choices": [{"message": {"content": "[]"}}]}
+    monkeypatch.setattr("app.requests.post", Mock(return_value=mock_response))
+    fund = make_fund("Fund One", 105, 90, 1.16)
+
+    with pytest.raises(RuntimeError, match="not an analysis object"):
+        request_ai_analysis([fund], rank_funds([fund]), "5 years")
+
+
+def test_request_ai_analysis_rejects_changed_deterministic_rank(monkeypatch):
+    import json
+
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    result = {
+        "overall_summary": "A concise summary.",
+        "funds": [{
+            "scheme_name": "Fund One",
+            "rank": 2,
+            "reason": "A reason.",
+            "strengths": ["A strength."],
+            "limitations": ["A limitation."],
+        }],
+    }
+    mock_response = Mock()
+    mock_response.status_code = 200
+    mock_response.json.return_value = {
+        "choices": [{"message": {"content": json.dumps(result)}}]
+    }
+    monkeypatch.setattr("app.requests.post", Mock(return_value=mock_response))
+    fund = make_fund("Fund One", 105, 90, 1.16)
+
+    with pytest.raises(RuntimeError, match="changed the validated deterministic ranking"):
+        request_ai_analysis([fund], rank_funds([fund]), "5 years")
 
 
 def test_run_report_builds_pdf_from_mocked_source_and_ai(monkeypatch):
