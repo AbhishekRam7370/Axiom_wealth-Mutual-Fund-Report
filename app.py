@@ -107,11 +107,15 @@ def identify_capture_table(tables: list[pd.DataFrame]) -> pd.DataFrame:
 
 
 def column_for(table: pd.DataFrame, phrase: str) -> Any:
+    """Prefer an exact normalized header before falling back to substring matching."""
+    requested = normalize_name(phrase)
     for column in table.columns:
-        if phrase.casefold() in re.sub(r"\s+", " ", str(column)).casefold():
+        if normalize_name(str(column)) == requested:
+            return column
+    for column in table.columns:
+        if requested in normalize_name(str(column)):
             return column
     return None
-
 
 def select_scheme_suggestion(requested_name: str, suggestions: list[str]) -> str:
     """Resolve one scheme conservatively; never silently choose among variants."""
