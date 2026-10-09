@@ -507,11 +507,91 @@ def main() -> None:
     st.markdown(
         """
         <style>
-        .stApp { background: #f5f7fb; }
+        :root { color-scheme: light; }
+        .stApp,
+        [data-testid="stAppViewContainer"] {
+            background: #f5f7fb !important;
+            color: #1f2937 !important;
+        }
         .block-container { max-width: 1120px; padding-top: 2rem; }
-        .hero { padding: 1.7rem 2rem; border-radius: 18px; background: linear-gradient(120deg,#14324a,#246b78); color: white; margin-bottom: 1.5rem; }
-        .hero h1 { color: white; margin-bottom: .4rem; }
-        .hero p { color: #e5f0f4; font-size: 1.05rem; }
+        .stApp p,
+        .stApp li,
+        .stApp label,
+        .stApp legend,
+        .stApp [data-testid="stMarkdownContainer"],
+        .stApp [data-testid="stWidgetLabel"] {
+            color: #1f2937 !important;
+        }
+        .stApp h1,
+        .stApp h2,
+        .stApp h3,
+        .stApp h4,
+        .stApp h5,
+        .stApp h6 {
+            color: #102a43 !important;
+        }
+        [data-testid="stCaptionContainer"],
+        .stCaption {
+            color: #475569 !important;
+        }
+        .stTextInput input,
+        .stTextArea textarea,
+        [data-baseweb="input"] input,
+        [data-baseweb="textarea"] textarea {
+            background-color: #ffffff !important;
+            color: #172b4d !important;
+            -webkit-text-fill-color: #172b4d !important;
+            border-color: #94a3b8 !important;
+        }
+        .stTextInput input::placeholder,
+        .stTextArea textarea::placeholder,
+        [data-baseweb="input"] input::placeholder,
+        [data-baseweb="textarea"] textarea::placeholder {
+            color: #64748b !important;
+            -webkit-text-fill-color: #64748b !important;
+            opacity: 1 !important;
+        }
+        [data-testid="stSelectbox"] [data-baseweb="select"] > div,
+        [data-baseweb="popover"],
+        [role="listbox"],
+        [role="option"] {
+            background-color: #ffffff !important;
+            color: #172b4d !important;
+        }
+        [data-testid="stSelectbox"] [data-baseweb="select"] * ,
+        [data-baseweb="popover"] *,
+        [role="listbox"] *,
+        [role="option"] * {
+            color: #172b4d !important;
+        }
+        [data-testid="stRadio"] label,
+        [data-testid="stRadio"] label p,
+        [data-testid="stCheckbox"] label,
+        [data-testid="stCheckbox"] label p {
+            color: #1f2937 !important;
+        }
+        [data-testid="stAlert"] * {
+            color: #1f2937 !important;
+        }
+        [data-testid="stButton"] button,
+        [data-testid="stDownloadButton"] button {
+            background-color: #14324a !important;
+            color: #ffffff !important;
+            border: 1px solid #14324a !important;
+        }
+        [data-testid="stButton"] button *,
+        [data-testid="stDownloadButton"] button * {
+            color: #ffffff !important;
+        }
+        .hero {
+            padding: 1.7rem 2rem;
+            border-radius: 18px;
+            background: linear-gradient(120deg, #14324a, #246b78);
+            color: #ffffff;
+            margin-bottom: 1.5rem;
+        }
+        .hero h1 { color: #ffffff !important; margin-bottom: .4rem; }
+        .hero p { color: #e5f0f4 !important; font-size: 1.05rem; }
         </style>
         <div class="hero">
           <h1>Fund Report</h1>
