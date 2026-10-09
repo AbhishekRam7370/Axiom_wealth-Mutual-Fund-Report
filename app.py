@@ -508,6 +508,9 @@ def main() -> None:
             try:
                 names = parse_fund_names(pasted_names)
                 st.session_state.fund_entries = [{"name": name, "category": ""} for name in names]
+                for index in range(10):
+                    st.session_state[f"fund_name_{index}"] = names[index] if index < len(names) else ""
+                    st.session_state[f"fund_category_{index}"] = "Select category"
                 st.rerun()
             except ValueError as error:
                 st.error(str(error))
