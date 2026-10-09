@@ -9,6 +9,7 @@ from app import (
     parse_fund_names,
     parse_numeric,
     rank_funds,
+    resolve_advisorkhoj_url,
 )
 
 
@@ -88,3 +89,24 @@ def test_build_pdf_returns_pdf_bytes_with_source_data():
     result = build_pdf(funds, ranking, analysis, "5 years")
     assert result.startswith(b"%PDF")
     assert len(result) > 1000
+
+
+@pytest.mark.parametrize(
+    ("url", "expected"),
+    [
+        (
+            "https://www.advisorkhoj.com/mutual-funds-research/market-capture-ratio",
+            "https://www.advisorkhoj.com/mutual-funds-research/market-capture-ratio?PageSpeed=noscript",
+        ),
+        (
+            "https://www.advisorkhoj.com/mutual-funds-research/market-capture-ratio?campaign=test",
+            "https://www.advisorkhoj.com/mutual-funds-research/market-capture-ratio?campaign=test&PageSpeed=noscript",
+        ),
+        (
+            "https://www.advisorkhoj.com/mutual-funds-research/market-capture-ratio?PageSpeed=noscript",
+            "https://www.advisorkhoj.com/mutual-funds-research/market-capture-ratio?PageSpeed=noscript",
+        ),
+    ],
+)
+def test_resolve_advisorkhoj_url_uses_noscript_mode(url, expected):
+    assert resolve_advisorkhoj_url(url) == expected
