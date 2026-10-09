@@ -24,4 +24,4 @@ Target duration: 4 minutes 30 seconds.
 
 ## Current recording status
 
-The outline is ready. A live demo cannot be recorded until the source integration is verified, a provider key is configured, and the application is deployed.
+The developer has confirmed the local source → AI analysis → PDF workflow using the existing FreeLLMAPI setup. The refreshed UI and provenance/PDF changes need a post-pull test run and visual review before recording. The public deployment has not been verified, so do not describe a public URL as live or record a deployment demo until it is available.
