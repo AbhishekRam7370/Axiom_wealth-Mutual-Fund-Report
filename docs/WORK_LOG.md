@@ -25,6 +25,17 @@
 - Improved PDF source provenance layout in the previous commit: per-fund key/value tables, escaped metadata, wrapped long source URLs, and clickable AdvisorKhoj source links; the matching regression test covers ampersands and query strings.
 - Updated the README architecture and current verification notes. The current UI/PDF commit has **not yet been locally tested**. The user should pull the branch, run the full test suite (expected 27 cases), launch Streamlit, regenerate a fresh PDF, and visually inspect it. No public deployment or demo recording is claimed complete.
 
+## Requirements hardening follow-up — 9 October 2026
+
+- Implemented the approved priority follow-up on the feature branch: ranking now uses the source Capture Ratio only and fails closed when that metric is absent rather than mixing it with the previous up-minus-down fallback on another scale.
+- Added a documented ordering rule for negative ratios consistent with AdvisorKhoj’s explanation: a negative ratio is treated favourably only when it comes from negative down-market capture with non-negative up-market capture; other negative ratios follow ordinary non-negative ratios.
+- Added post-resolution canonical scheme deduplication and reject duplicate resolved schemes before reaching AI analysis.
+- Strengthened AI output shape checks, including object/list/item/scheme-name validation and preserving the application’s deterministic ranks. Escaped model-generated text in PDF paragraphs and added a printed ranking methodology.
+- Cleared the previous report at the start of a new generation attempt so a failed attempt does not leave an old report presented beside the current failure.
+- Added deterministic regression tests for negative ratio ranking, missing ratios, canonical duplicates, AI response contracts, mocked source-to-AI-to-PDF generation, and PDF text containing markup-like characters.
+- Updated README ranking/deployment notes. AdvisorKhoj’s published page defines Capture Ratio as Up Market Capture Ratio divided by Down Market Capture Ratio and notes the special interpretation of negative ratios; its terms state content is copyrighted and usage is subject to the terms. Permission/source access remains a production prerequisite rather than a code change.
+- **Verification pending:** the latest branch is expected to have 36 pytest cases, but the current full suite has not been executed locally after these changes. A fresh PDF and visible desktop/mobile review also remain required. Public deployment and recording are not claimed completed.
+
 ## Time accounting
 
 Active implementation time was not measured by a reliable timer. No numerical hours total is claimed. Record the actual active work time in the assignment submission once it has been measured.
