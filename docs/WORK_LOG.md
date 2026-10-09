@@ -12,6 +12,8 @@
 - Live manual verification confirmed AdvisorKhoj's suggestion endpoint returns canonical labels `Parag Parikh Flexi Cap Dir Gr` and `Parag Parikh Flexi Cap Reg Gr`; direct results-page requests returned capture rows for both. Current application code now resolves canonical labels and rejects ambiguous generic names; the user still needs to pull the latest commit and run tests plus `fetch_one_fund` end to end.
 - The latest branch patch removes the Playwright runtime requirement, fetches categories with lxml, resolves source scheme names using the endpoint's prefix behavior, requests the actual results page by category/scheme/period, rejects ambiguous variants, and adds six scheme-resolution tests plus two mocked endpoint tests. There are now 24 test cases defined; execution against this latest commit is pending.
 
+- Follow-up PDF layout fix: the `Source figures and provenance` section now uses a labeled two-column table for each fund, displays capture values consistently, wraps long source URLs, provides a clickable AdvisorKhoj source link, and HTML-escapes source metadata. Added a regression test for ampersands and long query-string URLs; the updated test suite and rendered PDF still need verification after pull.
+
 ## Time accounting
 
 Active implementation time was not measured by a reliable timer. No numerical hours total is claimed. Record the actual active work time in the assignment submission once it has been measured.
