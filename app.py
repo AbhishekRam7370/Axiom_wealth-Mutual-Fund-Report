@@ -24,6 +24,7 @@ from reportlab.platypus import (
     Spacer,
     Table,
     TableStyle,
+    KeepTogether,
 )
 
 load_dotenv()
@@ -389,6 +390,9 @@ def build_pdf(funds: list[FundCaptureData], ranking: list[dict[str, Any]], analy
     styles.add(ParagraphStyle(name="ReportTitle", parent=styles["Title"], fontSize=23, leading=28, textColor=colors.HexColor("#14324A"), alignment=TA_CENTER, spaceAfter=8 * mm))
     styles.add(ParagraphStyle(name="SectionTitle", parent=styles["Heading2"], fontSize=14, leading=18, textColor=colors.HexColor("#14324A"), spaceBefore=5 * mm, spaceAfter=3 * mm))
     styles.add(ParagraphStyle(name="SmallBody", parent=styles["BodyText"], fontSize=8.5, leading=12, spaceAfter=2 * mm))
+    styles.add(ParagraphStyle(name="SourceFundTitle", parent=styles["Heading3"], fontSize=10.5, leading=13, textColor=colors.HexColor("#14324A"), spaceBefore=1 * mm, spaceAfter=0))
+    styles.add(ParagraphStyle(name="SourceLabel", parent=styles["SmallBody"], fontSize=8, leading=10, textColor=colors.HexColor("#344054"), wordWrap="CJK", spaceAfter=0))
+    styles.add(ParagraphStyle(name="SourceValue", parent=styles["SmallBody"], fontSize=8, leading=10, textColor=colors.HexColor("#344054"), wordWrap="CJK", splitLongWords=1, spaceAfter=0))
     story: list[Any] = [
         Spacer(1, 20 * mm),
         Paragraph("MUTUAL FUND REPORT", styles["ReportTitle"]),
@@ -441,15 +445,68 @@ def build_pdf(funds: list[FundCaptureData], ranking: list[dict[str, Any]], analy
         story.append(Paragraph(f"<b>Strengths:</b> {str(strengths)}", styles["BodyText"]))
         story.append(Paragraph(f"<b>Limitations:</b> {str(limitations)}", styles["BodyText"]))
     story.append(Paragraph("Source figures and provenance", styles["SectionTitle"]))
-    for fund in funds:
-        story.append(Paragraph(
-            f"<b>{fund.scheme_name}</b><br/>AMC: {fund.amc_name} | Benchmark: {fund.benchmark_name} | "
-            f"Launch date: {fund.launch_date}<br/>Scheme return: {fund.scheme_return_percent if fund.scheme_return_percent is not None else 'Not provided'}% | "
-            f"Up capture: {fund.up_capture_percent}% | Down capture: {fund.down_capture_percent}% | "
-            f"Capture ratio: {fund.capture_ratio if fund.capture_ratio is not None else 'Not provided'}<br/>"
-            f"Retrieved: {fund.retrieved_at}<br/>Source: {fund.source_url}",
-            styles["SmallBody"],
-        ))
+    for index, fund in enumerate(funds, start=1):
+        scheme_title = Paragraph(
+            f"{index}. {safe_paragraph(fund.scheme_name)}",
+            styles["SourceFundTitle"],
+        )
+
+        def percentage_text(value: float | None) -> str:
+            return "Not provided" if value is None else f"{value:.2f}%"
+
+        def ratio_text(value: float | None) -> str:
+            return "Not provided" if value is None else f"{value:.2f}"
+
+        source_href = escape(str(fund.source_url), {'"': "&quot;"})
+        source_value = Paragraph(
+            '<link href="' + source_href + '" color="#1d5d8c">'
+            "Open AdvisorKhoj source page</link><br/>"
+            '<font size="6" color="#64748b">' + safe_paragraph(fund.source_url) + "</font>",
+            styles["SourceValue"],
+        )
+
+        provenance_rows = [
+            ("AMC", fund.amc_name or "Not provided"),
+            ("Benchmark", fund.benchmark_name or "Not provided"),
+            ("Launch date", fund.launch_date or "Not provided"),
+            ("Analysis period", fund.period or "Not provided"),
+            ("Scheme return", percentage_text(fund.scheme_return_percent)),
+            ("Up-market capture", percentage_text(fund.up_capture_percent)),
+            ("Down-market capture", percentage_text(fund.down_capture_percent)),
+            ("Capture ratio", ratio_text(fund.capture_ratio)),
+            ("Retrieved at (UTC)", fund.retrieved_at or "Not provided"),
+            ("Source URL", source_value),
+        ]
+        provenance_table_rows = []
+        for label, value in provenance_rows:
+            label_cell = Paragraph(f"<b>{safe_paragraph(label)}</b>", styles["SourceLabel"])
+            value_cell = value if isinstance(value, Paragraph) else Paragraph(
+                safe_paragraph(value), styles["SourceValue"]
+            )
+            provenance_table_rows.append([label_cell, value_cell])
+
+        provenance_table = Table(
+            provenance_table_rows,
+            colWidths=[37 * mm, 139 * mm],
+            hAlign="LEFT",
+        )
+        provenance_table.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (0, -1), colors.HexColor("#EEF3F8")),
+            ("BACKGROUND", (1, 0), (1, -1), colors.white),
+            ("GRID", (0, 0), (-1, -1), 0.35, colors.HexColor("#D5DEE8")),
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ("LEFTPADDING", (0, 0), (-1, -1), 6),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+            ("TOPPADDING", (0, 0), (-1, -1), 4),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+        ]))
+        story.append(KeepTogether([
+            Spacer(1, 2 * mm),
+            scheme_title,
+            Spacer(1, 1 * mm),
+            provenance_table,
+            Spacer(1, 4 * mm),
+        ]))
     story.extend([Paragraph("Important limitations", styles["SectionTitle"]), Paragraph(DISCLAIMER, styles["SmallBody"])])
     def add_page_number(canvas: Any, doc: Any) -> None:
         canvas.saveState()
