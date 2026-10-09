@@ -1,47 +1,57 @@
-# Fund Report — Market Capture Intelligence
+# Fund Report — Mutual Fund Market Capture Intelligence
 
-A Streamlit application for comparing 2–10 mutual funds using AdvisorKhoj Market Capture Ratio figures, a configured OpenAI-compatible language model, and a generated PDF report.
+A Python/Streamlit application for comparing mutual fund schemes using market-capture figures, generating an explainable ranking, requesting an AI-written interpretation, and exporting the results as a PDF.
 
-## Current status
+## Project status
 
-The developer confirmed an earlier local source → AI analysis → PDF workflow using AdvisorKhoj and the existing FreeLLMAPI OpenAI-compatible endpoint. Live source retrieval was checked for Parag Parikh Flexi Cap Direct Growth and Mirae Asset Large Cap Direct Growth for 1-, 3-, 5-, and 10-year periods; their earlier 5-year capture ratios were 1.33 and 1.01. **That earlier end-to-end confirmation predates the latest ranking, AI-safety, UI, and PDF hardening changes. Those latest changes still require a local test run and a fresh PDF visual review.**
-
-The feature branch includes a redesigned Streamlit workspace, session-persisted report results, a benchmark-aware comparison table and capture chart, canonical-scheme duplicate checks, a single-metric ranking policy, validated AI JSON output, escaped model text in PDFs, and structured source provenance. The current pytest suite is expected to contain 36 test cases; the latest revision has not yet been executed locally.
-
-The app deliberately fails when it cannot resolve a fund or retrieve a required capture ratio. It does not substitute demo figures or a static sample report. Public deployment and demo recording have not been verified.
-
-## Application architecture
-
-This repository is a **single-page Streamlit application**. The UI, AdvisorKhoj retrieval adapter, deterministic ranking, AI provider client, and ReportLab PDF builder live in `app.py`; regression tests are in `tests/test_core.py`. The project currently has no separate frontend/backend service split, database, authentication screens, or multi-route page set to redesign. The presentation work intentionally keeps the existing Streamlit stack and retrieval/report functions.
-
-The UI is organized as three working areas: build a comparison (2–10 unique schemes and category per scheme), set report settings (1/3/5/10 years and AI configuration status), and review the generated report (summary, ranked figures, benchmark-aware table, source-derived chart, per-fund AI notes, provenance, and PDF download). Generated results are stored in Streamlit session state so clicking download or interacting with the page does not immediately discard the report.
+- **Automated tests:** 36 passed in 5.47 seconds in the latest local run reported on October 9, 2026.
+- **Manual verification:** The latest Streamlit UI and a freshly generated PDF were confirmed by the project owner.
+- **GitHub workflow:** Development is on `feature/fund-report-app`; pull request #1 is open as a draft and has not been merged.
+- **Public deployment:** Not verified. The app is currently run locally.
+- **Data-source authorization:** Confirm permission or an appropriate official data interface with AdvisorKhoj before sustained or commercial use.
 
 ## Features
 
-- Enter fund names directly or paste a list.
-- Select 2–10 unique funds and a category for each fund.
-- Choose a 1-, 3-, 5-, or 10-year analysis period.
-- Retrieve scheme, benchmark, up-capture, down-capture, and capture-ratio figures from the AdvisorKhoj Market Capture Ratio tool.
-- Calculate a deterministic ranking before requesting the LLM explanation.
-- Validate the AI response for complete fund coverage and consistent ranking.
-- Review a benchmark-aware comparison table and a chart built from the retrieved up/down capture values.
-- Expand per-scheme AI explanations to read ranking rationale, strengths, and limitations.
-- Keep a generated result visible across normal Streamlit reruns, including PDF download interactions.
-- Generate a selectable-text PDF containing figures, ranking, explanations, clickable source provenance, retrieval timestamps, and a risk disclaimer.
-- Use responsive layouts, high-contrast form controls, loading/status messages, an empty state, and actionable errors instead of invented data.
+- Compare 2–10 unique mutual fund schemes.
+- Enter scheme names directly or paste a list, and select a category for each fund.
+- Choose a 1-, 3-, 5-, or 10-year period.
+- Retrieve scheme, benchmark, up-capture, down-capture, and capture-ratio data from the AdvisorKhoj Market Capture Ratio tool.
+- Rank funds deterministically using source capture-ratio data and a documented treatment of negative ratios.
+- Ask an OpenAI-compatible language model to explain the precomputed ranking; validate the response and do not let the model change the ranks.
+- Review a comparison table, a chart based on retrieved values, and per-fund AI explanations.
+- Generate a selectable-text PDF with figures, ranking, explanations, source provenance and links, retrieval timestamps, and a financial-risk disclaimer.
+- Show actionable errors rather than substituting fabricated or static fund data.
+
+## Architecture
+
+This is a **single-page Streamlit application**. Retrieval, normalization, deterministic ranking, AI-provider integration, report rendering, and PDF creation are implemented in `app.py`. Automated regression tests are in `tests/test_core.py`.
+
+The main data flow is:
+
+1. Resolve the entered scheme name against the source's scheme suggestions.
+2. Retrieve and validate the matching source result for the selected category and period.
+3. Calculate the deterministic order using the reported capture ratio.
+4. Request AI explanations for that order and validate the returned JSON.
+5. Display the comparison and generate the PDF.
 
 ## Technology
 
 - Python and Streamlit
-- requests and lxml for AdvisorKhoj scheme suggestions, category options, and results-page parsing
-- pandas for table extraction and normalization
-- OpenAI-compatible Chat Completions API for narrative explanations
+- requests and lxml for source retrieval and HTML parsing
+- pandas for table extraction and data normalization
+- An OpenAI-compatible Chat Completions endpoint for AI explanations
 - ReportLab for PDF generation
 - pytest for automated tests
 
-## Local setup
+## Requirements
 
-Use Python 3.11 or newer.
+- Python 3.11 or newer
+- Network access to the configured data source
+- A reachable OpenAI-compatible AI endpoint and valid API key for AI report generation
+
+## Local setup (Windows PowerShell)
+
+From the repository root:
 
 ```powershell
 python -m venv .venv
@@ -51,68 +61,60 @@ pip install -r requirements.txt
 Copy-Item .env.example .env
 ```
 
-Edit `.env` and set `OPENAI_API_KEY`. Never commit the real key. The default model is `gpt-4o-mini`; configure a model available to your provider using `OPENAI_MODEL`. An OpenAI-compatible endpoint can be supplied through `OPENAI_BASE_URL`.
+Edit the local `.env` file and configure the AI provider values. Do not commit real API keys.
 
-Run the application:
+Start the application:
 
 ```powershell
 streamlit run app.py
 ```
 
-Run tests:
+Open the local URL printed by Streamlit, typically:
+
+```text
+http://localhost:8501
+```
+
+Run the automated tests:
 
 ```powershell
 python -m pytest -q
 ```
 
-## Environment variables
+## Configuration
 
-| Variable | Required | Purpose |
-| --- | --- | --- |
-| `OPENAI_API_KEY` | Yes for report generation | Server-side API credential for the language model |
-| `OPENAI_MODEL` | No | Model identifier; defaults to `gpt-4o-mini` |
-| `OPENAI_BASE_URL` | No | OpenAI-compatible API root; defaults to `https://api.openai.com/v1` |
-| `ADVISORKHOJ_URL` | No | AdvisorKhoj Market Capture Ratio page URL |
+| Variable | Purpose |
+| --- | --- |
+| `OPENAI_API_KEY` | API credential for the configured AI endpoint; required for AI report generation |
+| `OPENAI_MODEL` | Model identifier supported by the provider; defaults to `gpt-4o-mini` |
+| `OPENAI_BASE_URL` | OpenAI-compatible API root; defaults to `https://api.openai.com/v1` |
+| `ADVISORKHOJ_URL` | AdvisorKhoj Market Capture Ratio page URL |
 
-The key must remain in the hosting provider's secret settings or a local, untracked `.env` file. Never place it in frontend code or commit it.
+Keep credentials in an untracked local `.env` file or the hosting provider's secret settings. Never hard-code credentials in source code or commit them to GitHub.
 
-## Data retrieval and interpretation
+## Data source and interpretation
 
-The primary source is [AdvisorKhoj Market Capture Ratio](https://www.advisorkhoj.com/mutual-funds-research/market-capture-ratio). Its published explanation describes up-market capture as participation during rising benchmark periods, down-market capture as participation during falling benchmark periods, and capture ratio as the relationship between the two. A lower down-market capture can indicate less downside participation, while a higher up-market capture can indicate more upside participation. Benchmark differences and fund category still matter.
+The application uses the [AdvisorKhoj Market Capture Ratio tool](https://www.advisorkhoj.com/mutual-funds-research/market-capture-ratio). Its retrieval adapter uses the page-referenced scheme-suggestion endpoint and parses the results page. Because this depends on a website interface rather than a configured official API, changes to the page, access restrictions, or network failures may stop retrieval. Scheme names, category labels, and periods must match the options supported by the source.
 
-The source page is interactive. The scraper queries the scheme-suggestion endpoint referenced by the page's own JavaScript, then requests the public results page for the resolved canonical scheme label, category, and period. It validates that exactly one matching row contains both capture columns. When a generic name maps to multiple variants (for example, Direct and Regular Growth), it asks the user to enter a distinguishing/exact scheme label rather than silently choosing. Page changes, access restrictions, and network failures are surfaced as errors. For sustained or commercial use, obtain permission or an official data interface from AdvisorKhoj.
+The app requires a valid source capture ratio for each fund and stops with an actionable error if required data is unavailable. It does not substitute an up-minus-down fallback score or invent missing data. Ranking is a simple disclosed comparison heuristic, not an investment-suitability model or a return forecast. Different categories and benchmarks can limit the direct comparability of funds.
 
-## Ranking and AI safeguards
+**Before sustained or commercial use, confirm authorization or obtain an appropriate official data interface from AdvisorKhoj.**
 
-The app requires the source's Capture Ratio for every selected fund; it does not mix that ratio with a fallback score on a different scale. If a ratio is missing, report generation stops with an actionable error. Ranking uses the reported Capture Ratio with the following explicit ordering: negative ratios are placed first only when the source up-capture is non-negative and down-capture is negative (the source identifies that case as potentially favourable); other non-negative ratios follow from high to low; other negative ratios follow them. This is a simple, disclosed comparison heuristic, not an investment suitability model or return forecast. Benchmark/category differences can still make cross-fund comparisons less direct.
+## AI and PDF safeguards
 
-The LLM is asked to explain the existing deterministic order rather than set or change ranks. The response validator checks the top-level JSON shape, fund coverage, item structure, and rank consistency before the PDF is generated. Model-generated strings are HTML-escaped before being rendered into ReportLab paragraphs. Canonical schemes are checked for duplicates after resolution as well as validating the names entered in the form.
+- Deterministic ranking is calculated before AI explanation.
+- AI output is checked for valid JSON shape, complete fund coverage, and rank consistency.
+- Model-generated text is escaped before being rendered into PDF paragraphs.
+- Duplicate schemes are checked after canonical source resolution.
+- PDF provenance includes source references and clickable links.
+- The latest reported local test suite contains 36 passing cases; the project owner also confirmed the latest UI and PDF review.
 
-## Deployment
+## Deployment notes
 
-A Render blueprint is included in `render.yaml`. To deploy:
+A Render blueprint is included in `render.yaml`, but a public deployment has not been verified. Before hosting, configure an AI endpoint reachable from the hosting environment, add credentials through secret settings, review provider costs/quotas, and protect public access so the endpoint cannot be abused.
 
-1. Push this repository to GitHub.
-2. Create a new Render Blueprint deployment from the repository.
-3. Set `OPENAI_API_KEY` and the intended `OPENAI_MODEL` in Render's environment settings.
-4. Set `OPENAI_BASE_URL` to an AI endpoint reachable from Render. Do not use a local-only `localhost` URL for FreeLLMAPI; from a hosted container it would point back to that container, not your PC.
-5. Confirm the selected plan and any possible charges before deploying.
-6. Confirm whether the source retrieval arrangement is authorized for the intended use, then open the public URL and test source retrieval, AI analysis, access controls, and PDF download with real data. Do not expose a provider key through an unrestricted public endpoint.
-
-The blueprint installs Python dependencies without a browser binary. Hosting plan limits, outbound requests, source availability, and request execution time must still be validated in the actual deployment. No live URL is claimed by this repository until a public deployment has been completed and checked.
-
-## Known limitations before production use
-
-- The financial ranking policy, AI output escaping, duplicate canonical scheme check, and report-result state safeguards were recently tightened; run the newest tests and generate a fresh PDF before accepting those changes.
-- Live source retrieval depends on an undocumented website page/endpoint and HTML table structure. The site's current terms state that use of its service is subject to the terms and that website elements are copyrighted; permission or a suitable official interface should be confirmed before sustained/commercial use.
-- Generic names that match multiple source variants must be made explicit (for example, Direct Growth vs Regular Growth).
-- The current source interface's available categories and period labels may change.
-- There is no official AdvisorKhoj API credential configured in this project.
-- A free/public AI endpoint may have quotas and limitations; hosted inference must be reachable from the deployment environment.
-- No genuine sample report is checked in because one must be generated from live, retrieved figures.
-- The app is informational and does not provide individualized financial advice.
-- The latest full test and visual regression run is still pending.
+A local URL such as `http://localhost:3002` for FreeLLMAPI will point to the hosted container itself—not to a service running on the developer's PC—when deployed remotely. Configure a reachable, securely protected endpoint for the hosted app.
 
 ## Financial disclaimer
 
-Mutual fund investments are subject to market risks. Market capture figures describe historical behavior against a benchmark and do not guarantee future returns. The generated report is educational only, not investment advice. Review scheme documents and consult a qualified financial adviser before making investment decisions.
+Mutual fund investments are subject to market risks. Market-capture figures describe historical behavior relative to a benchmark and do not guarantee future performance. This app provides informational research only and does not provide individualized financial advice. Review scheme documents and consult a qualified financial adviser before making investment decisions.
