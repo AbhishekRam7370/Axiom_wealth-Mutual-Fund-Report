@@ -51,7 +51,7 @@ streamlit run app.py
 Run tests:
 
 ```powershell
-pytest -q
+python -m pytest -q
 ```
 
 ## Environment variables
