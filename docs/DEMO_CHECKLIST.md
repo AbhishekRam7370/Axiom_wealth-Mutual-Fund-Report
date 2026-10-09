@@ -24,4 +24,4 @@ Target duration: 4 minutes 30 seconds.
 
 ## Current recording status
 
-The developer has confirmed the local source → AI analysis → PDF workflow using the existing FreeLLMAPI setup. The refreshed UI and provenance/PDF changes need a post-pull test run and visual review before recording. The public deployment has not been verified, so do not describe a public URL as live or record a deployment demo until it is available.
+An earlier version of the local source → AI analysis → PDF workflow was confirmed using the existing FreeLLMAPI setup. Subsequent changes have tightened ranking, AI response validation, duplicate-scheme checks, report-state handling, and PDF rendering. Pull and test the exact latest branch and generate a fresh PDF before recording. The public deployment has not been verified, so do not describe a public URL as live or record a deployment demo until it has been created and tested.
