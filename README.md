@@ -4,11 +4,11 @@ A Streamlit application for comparing 2–10 mutual funds using AdvisorKhoj Mark
 
 ## Current status
 
-The developer confirmed the local source → AI analysis → PDF workflow is working with AdvisorKhoj retrieval and the existing FreeLLMAPI OpenAI-compatible endpoint. Live source retrieval was checked for Parag Parikh Flexi Cap Direct Growth and Mirae Asset Large Cap Direct Growth for 1-, 3-, 5-, and 10-year periods. The 5-year capture ratios were verified as 1.33 and 1.01 respectively. Twenty-five tests passed before the latest provenance/UI redesign commits.
+The developer confirmed an earlier local source → AI analysis → PDF workflow using AdvisorKhoj and the existing FreeLLMAPI OpenAI-compatible endpoint. Live source retrieval was checked for Parag Parikh Flexi Cap Direct Growth and Mirae Asset Large Cap Direct Growth for 1-, 3-, 5-, and 10-year periods; their earlier 5-year capture ratios were 1.33 and 1.01. **That earlier end-to-end confirmation predates the latest ranking, AI-safety, UI, and PDF hardening changes. Those latest changes still require a local test run and a fresh PDF visual review.**
 
-The current feature branch refreshes the Streamlit reporting workspace, persists a generated report across Streamlit reruns, adds a benchmark-aware table and source-based capture chart, and improves the PDF provenance section. **The updated suite and fresh PDF layout must still be verified locally after pulling the latest commit.** Public deployment and the demo recording are not yet verified.
+The feature branch includes a redesigned Streamlit workspace, session-persisted report results, a benchmark-aware comparison table and capture chart, canonical-scheme duplicate checks, a single-metric ranking policy, validated AI JSON output, escaped model text in PDFs, and structured source provenance. The current pytest suite is expected to contain 36 test cases; the latest revision has not yet been executed locally.
 
-The app deliberately fails when it cannot resolve a fund or retrieve its required capture figures. It does not substitute demo figures or a static sample report.
+The app deliberately fails when it cannot resolve a fund or retrieve a required capture ratio. It does not substitute demo figures or a static sample report. Public deployment and demo recording have not been verified.
 
 ## Application architecture
 
