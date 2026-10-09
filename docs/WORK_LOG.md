@@ -5,10 +5,11 @@
 - Inspected repository metadata through the connected GitHub integration.
 - Confirmed the repository was initially empty and had no README, application files, branches, or commits.
 - Created an initial ignore-rules commit on `main` and a separate implementation branch, `feature/fund-report-app`.
-- Added a Streamlit application scaffold, AdvisorKhoj Playwright retrieval adapter, deterministic ranking, OpenAI-compatible analysis, PDF generation, tests, setup documentation, environment template, and Render blueprint.
+- Added the Streamlit application, deterministic ranking, OpenAI-compatible analysis, PDF generation, tests, setup documentation, environment template, and Render blueprint. The AdvisorKhoj retrieval adapter was subsequently changed from Playwright form automation to the source page's own suggestion endpoint plus direct results-page requests.
 - Inspected the public AdvisorKhoj Market Capture Ratio page and its published metric definitions.
 - Created draft pull request #1 for review.
-- Attempted to clone the repository to run tests locally, but the execution environment could not resolve `github.com`. Automated tests and live source integration therefore remain unexecuted in this session.
+- The local Windows environment successfully installed dependencies and Chromium after a transient network failure. The contributor ran `python -m pytest -q`: 16 tests passed before the latest scheme-resolution adapter changes.
+- Live manual verification confirmed AdvisorKhoj's suggestion endpoint returns canonical labels `Parag Parikh Flexi Cap Dir Gr` and `Parag Parikh Flexi Cap Reg Gr`; direct results-page requests returned capture rows for both. Current application code now resolves canonical labels and rejects ambiguous generic names; the user still needs to pull the latest commit and run tests plus `fetch_one_fund` end to end.
 
 ## Time accounting
 
