@@ -4,9 +4,17 @@ A Streamlit application for comparing 2–10 mutual funds using AdvisorKhoj Mark
 
 ## Current status
 
-This repository started empty. The app now uses AdvisorKhoj's page-referenced scheme suggestion endpoint and a direct request to the public Market Capture Ratio results page, one scheme at a time. The live lookup has been manually verified for the canonical Parag Parikh Flexi Cap Direct Growth and Regular Growth labels; the full multi-fund-to-AI-to-PDF workflow and deployment still require end-to-end verification.
+The developer confirmed the local source → AI analysis → PDF workflow is working with AdvisorKhoj retrieval and the existing FreeLLMAPI OpenAI-compatible endpoint. Live source retrieval was checked for Parag Parikh Flexi Cap Direct Growth and Mirae Asset Large Cap Direct Growth for 1-, 3-, 5-, and 10-year periods. The 5-year capture ratios were verified as 1.33 and 1.01 respectively. Twenty-five tests passed before the latest provenance/UI redesign commits.
+
+The current feature branch refreshes the Streamlit reporting workspace, persists a generated report across Streamlit reruns, adds a benchmark-aware table and source-based capture chart, and improves the PDF provenance section. **The updated suite and fresh PDF layout must still be verified locally after pulling the latest commit.** Public deployment and the demo recording are not yet verified.
 
 The app deliberately fails when it cannot resolve a fund or retrieve its required capture figures. It does not substitute demo figures or a static sample report.
+
+## Application architecture
+
+This repository is a **single-page Streamlit application**. The UI, AdvisorKhoj retrieval adapter, deterministic ranking, AI provider client, and ReportLab PDF builder live in `app.py`; regression tests are in `tests/test_core.py`. The project currently has no separate frontend/backend service split, database, authentication screens, or multi-route page set to redesign. The presentation work intentionally keeps the existing Streamlit stack and retrieval/report functions.
+
+The UI is organized as three working areas: build a comparison (2–10 unique schemes and category per scheme), set report settings (1/3/5/10 years and AI configuration status), and review the generated report (summary, ranked figures, benchmark-aware table, source-derived chart, per-fund AI notes, provenance, and PDF download). Generated results are stored in Streamlit session state so clicking download or interacting with the page does not immediately discard the report.
 
 ## Features
 
@@ -89,7 +97,7 @@ The blueprint installs Python dependencies without a browser binary. Hosting pla
 
 ## Known limitations before production use
 
-- Live single-scheme retrieval has been manually tested, but the full 2–10 scheme, AI, and PDF workflow still requires end-to-end verification.
+- The full local workflow was confirmed before the latest presentation changes; run the updated tests and regenerate a PDF after pulling this branch to verify the redesigned result area and provenance layout.
 - Generic names that match multiple source variants must be made explicit (for example, Direct Growth vs Regular Growth).
 - The current source interface's available categories and period labels may change.
 - There is no official AdvisorKhoj API credential configured in this project.
