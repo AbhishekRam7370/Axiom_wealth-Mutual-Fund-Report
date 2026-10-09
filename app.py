@@ -405,6 +405,8 @@ def request_ai_analysis(funds: list[FundCaptureData], ranking: list[dict[str, An
     if any(not isinstance(item, dict) for item in actual_funds):
         raise RuntimeError("The AI response contained a malformed fund analysis item.")
     actual_names = [item.get("scheme_name") for item in actual_funds]
+    if any(not isinstance(name, str) or not name.strip() for name in actual_names):
+        raise RuntimeError("The AI response contained a missing or malformed scheme name.")
     if len(actual_funds) != len(expected) or len(actual_names) != len(expected) or set(actual_names) != expected:
         raise RuntimeError("The AI response omitted, duplicated, or changed a selected fund.")
     expected_ranks = {item["scheme_name"]: item["rank"] for item in ranking}
