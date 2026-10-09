@@ -2,7 +2,6 @@ import io
 import json
 import os
 import re
-import time
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from typing import Any
@@ -10,11 +9,10 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from xml.sax.saxutils import escape
 
 import pandas as pd
+from lxml import html as lxml_html
 import requests
 import streamlit as st
 from dotenv import load_dotenv
-from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
-from playwright.sync_api import sync_playwright
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_CENTER
 from reportlab.lib.pagesizes import A4
@@ -32,6 +30,7 @@ load_dotenv()
 
 DEFAULT_SOURCE_URL = "https://www.advisorkhoj.com/mutual-funds-research/market-capture-ratio"
 SUPPORTED_PERIODS = {"1 year": "1 Year", "3 years": "3 Years", "5 years": "5 Years", "10 years": "10 Years"}
+PERIOD_CODES = {"1 year": "1", "3 years": "3", "5 years": "5", "10 years": "10"}
 DISCLAIMER = (
     "This report is for educational and informational purposes only. It is not investment advice, "
     "a recommendation to buy or sell a security, or a guarantee of future performance. Mutual fund "
@@ -114,149 +113,154 @@ def column_for(table: pd.DataFrame, phrase: str) -> Any:
     return None
 
 
-def source_select_options(page: Any) -> tuple[Any, Any, list[str]]:
-    select_count = page.locator("select").count()
-    category_control = None
-    period_control = None
-    categories: list[str] = []
-    for index in range(select_count):
-        control = page.locator("select").nth(index)
-        if not control.is_visible():
-            continue
-        options = control.locator("option").all_text_contents()
-        options = [re.sub(r"\s+", " ", option).strip() for option in options if option.strip()]
-        if not options:
-            continue
-        normalized_options = [option.casefold() for option in options]
-        if period_control is None and sum(bool(re.search(r"\b(?:1|3|5|10)\s*(?:year|yr)", option)) for option in normalized_options) >= 2:
-            period_control = control
-        if category_control is None and any(
-            keyword in " ".join(normalized_options)
-            for keyword in ("equity", "debt", "hybrid", "large cap", "small cap")
-        ):
-            category_control = control
-            categories = options
-    if category_control is None or period_control is None:
-        raise ValueError("Could not identify AdvisorKhoj category and period controls. The source page may have changed.")
-    return category_control, period_control, categories
+def select_scheme_suggestion(requested_name: str, suggestions: list[str]) -> str:
+    """Resolve one scheme conservatively; never silently choose among variants."""
+    cleaned = [re.sub(r"\\s+", " ", str(item)).strip() for item in suggestions]
+    cleaned = list(dict.fromkeys(item for item in cleaned if item))
+    if not cleaned:
+        raise ValueError(f"AdvisorKhoj returned no scheme suggestions for '{requested_name}'.")
 
-
-def choose_option(control: Any, requested: str) -> str:
-    options = control.locator("option").evaluate_all(
-        "(elements) => elements.map((element) => ({label: element.textContent.trim(), value: element.value}))"
-    )
-    requested_normalized = normalize_name(requested)
-    for option in options:
-        if normalize_name(option["label"]) == requested_normalized and option["value"]:
-            control.select_option(option["value"])
-            return option["label"]
-    for option in options:
-        if requested_normalized in normalize_name(option["label"]) and option["value"]:
-            control.select_option(option["value"])
-            return option["label"]
-    raise ValueError(f"AdvisorKhoj does not offer the requested option: {requested}")
-
-
-def locate_fund_input(page: Any) -> Any:
-    inputs = page.locator("input:visible")
-    candidates = []
-    for index in range(inputs.count()):
-        candidate = inputs.nth(index)
-        input_type = (candidate.get_attribute("type") or "text").casefold()
-        placeholder = (candidate.get_attribute("placeholder") or "").casefold()
-        name = (candidate.get_attribute("name") or "").casefold()
-        if input_type in {"text", "search"} and "search funds" not in placeholder and "search" not in name:
-            candidates.append(candidate)
-    if not candidates:
-        raise ValueError("Could not identify the AdvisorKhoj fund search input.")
-    for candidate in candidates:
-        descriptor = " ".join(
-            [
-                candidate.get_attribute("placeholder") or "",
-                candidate.get_attribute("name") or "",
-                candidate.get_attribute("id") or "",
-            ]
-        ).casefold()
-        if "fund" in descriptor or "scheme" in descriptor:
-            return candidate
-    return candidates[0]
-
-
-def select_suggestion(page: Any, requested_name: str) -> str:
-    deadline = time.monotonic() + 5
     requested_normalized = normalize_name(requested_name)
-    while time.monotonic() < deadline:
-        for selector in ['[role="option"]', ".ui-menu-item", ".autocomplete-suggestion", "li"]:
-            items = page.locator(selector)
-            for index in range(min(items.count(), 40)):
-                item = items.nth(index)
-                try:
-                    if not item.is_visible():
-                        continue
-                    label = re.sub(r"\s+", " ", item.inner_text()).strip()
-                    normalized_label = normalize_name(label)
-                    if normalized_label and (
-                        requested_normalized in normalized_label or normalized_label in requested_normalized
-                    ):
-                        item.click(timeout=1000)
-                        return label
-                except Exception:
-                    continue
-        page.wait_for_timeout(250)
-    raise ValueError(f"AdvisorKhoj could not resolve '{requested_name}' to a listed scheme.")
+    exact = [item for item in cleaned if normalize_name(item) == requested_normalized]
+    if len(exact) == 1:
+        return exact[0]
+
+    requested_tokens = set(requested_normalized.split())
+    direct_words = {"direct", "dir"}
+    regular_words = {"regular", "reg"}
+    if requested_tokens & direct_words:
+        variants = [item for item in cleaned if set(normalize_name(item).split()) & direct_words]
+        if len(variants) == 1:
+            return variants[0]
+    if requested_tokens & regular_words:
+        variants = [item for item in cleaned if set(normalize_name(item).split()) & regular_words]
+        if len(variants) == 1:
+            return variants[0]
+
+    if len(cleaned) == 1:
+        return cleaned[0]
+
+    generic_words = {"fund", "mutual", "scheme", "growth", "gr", "plan"}
+    meaningful_tokens = requested_tokens - generic_words - direct_words - regular_words
+    scores = {
+        item: len(meaningful_tokens & set(normalize_name(item).split())) /
+        max(1, len(meaningful_tokens))
+        for item in cleaned
+    }
+    best_score = max(scores.values())
+    winners = [item for item, score in scores.items() if score == best_score]
+    second_score = max((score for score in scores.values() if score < best_score), default=-1.0)
+    if len(winners) == 1 and best_score >= 0.75 and best_score - second_score >= 0.15:
+        return winners[0]
+
+    choices = "; ".join(cleaned[:8])
+    raise ValueError(
+        f"'{requested_name}' matches multiple AdvisorKhoj schemes. "
+        f"Enter one exact scheme name, for example: {choices}"
+    )
 
 
-def submit_source_form(page: Any) -> None:
-    buttons = page.get_by_role("button", name=re.compile(r"submit", re.I))
-    if buttons.count():
-        buttons.first.click()
-    else:
-        submits = page.locator('input[type="submit"]:visible')
-        if not submits.count():
-            raise ValueError("Could not identify the AdvisorKhoj Submit control.")
-        submits.first.click()
-    page.wait_for_timeout(900)
+def fetch_advisorkhoj_suggestions(
+    requested_name: str,
+    category: str,
+    source_url: str,
+    session: Any = None,
+) -> str:
+    """Resolve a typed fund name through AdvisorKhoj's page-referenced typeahead endpoint."""
+    from contextlib import nullcontext
+
+    owns_session = session is None
+    client_context = requests.Session() if owns_session else nullcontext(session)
+    with client_context as client:
+        parts = urlsplit(source_url)
+        endpoint = f"{parts.scheme}://{parts.netloc}/mutual-funds-research/autoSuggestAllMfSchemesShortNames"
+        headers = {
+            "User-Agent": "Mozilla/5.0 (compatible; FundReportResearch/1.0)",
+            "Referer": source_url,
+            "X-Requested-With": "XMLHttpRequest",
+        }
+        tokens = re.sub(r"\\s+", " ", requested_name).strip().split()
+        if not tokens:
+            raise ValueError("Enter a mutual-fund scheme name.")
+
+        # The source endpoint is prefix-oriented; dropping trailing generic words
+        # such as 'Fund' can reveal the canonical scheme labels.
+        tried: set[str] = set()
+        for width in range(len(tokens), 0, -1):
+            query = " ".join(tokens[:width])
+            if query.casefold() in tried:
+                continue
+            tried.add(query.casefold())
+            response = client.post(
+                endpoint,
+                data={"query": query, "category": category},
+                headers=headers,
+                timeout=(10, 30),
+            )
+            response.raise_for_status()
+            payload = response.json()
+            if not isinstance(payload, list):
+                raise RuntimeError("AdvisorKhoj returned an unexpected scheme-suggestion response.")
+            suggestions = [str(item) for item in payload if isinstance(item, str) and item.strip()]
+            if suggestions:
+                return select_scheme_suggestion(requested_name, suggestions)
+
+    raise ValueError(
+        f"AdvisorKhoj found no scheme matching '{requested_name}' in category '{category}'. "
+        "Check the name and category, then try again."
+    )
 
 
 def fetch_one_fund(requested_name: str, category: str, period: str) -> FundCaptureData:
     source_url = resolve_advisorkhoj_url(os.getenv("ADVISORKHOJ_URL", DEFAULT_SOURCE_URL))
+    period_key = period.casefold().strip()
+    if period_key not in SUPPORTED_PERIODS or period_key not in PERIOD_CODES:
+        raise ValueError(f"Unsupported analysis period: {period}")
+
     try:
-        with sync_playwright() as playwright:
-            browser = playwright.chromium.launch(headless=True, args=["--no-sandbox"])
-            page = browser.new_page()
-            page.set_default_timeout(8000)
-            page.goto(source_url, wait_until="commit", timeout=60000)
-            page.wait_for_selector("select", timeout=20000)
-            category_control, period_control, _ = source_select_options(page)
-            selected_category = choose_option(category_control, category)
-            selected_period = choose_option(period_control, SUPPORTED_PERIODS[period])
-            fund_input = locate_fund_input(page)
-            fund_input.fill(requested_name)
-            page.wait_for_timeout(500)
-            selected_scheme = select_suggestion(page, requested_name)
-            submit_source_form(page)
-            tables = pd.read_html(io.StringIO(page.content()))
+        with requests.Session() as session:
+            selected_scheme = fetch_advisorkhoj_suggestions(
+                requested_name, category, source_url, session=session
+            )
+            response = session.get(
+                source_url,
+                params={
+                    "category": category,
+                    "schemes": selected_scheme,
+                    "period": PERIOD_CODES[period_key],
+                },
+                headers={"User-Agent": "Mozilla/5.0 (compatible; FundReportResearch/1.0)"},
+                timeout=(10, 45),
+            )
+            response.raise_for_status()
+            tables = pd.read_html(io.StringIO(response.text))
             capture_table = identify_capture_table(tables)
             scheme_column = column_for(capture_table, "scheme name")
             if scheme_column is None:
                 scheme_column = capture_table.columns[0]
+
             matching_rows = capture_table[
                 capture_table[scheme_column].astype(str).map(
                     lambda name: normalize_name(name) == normalize_name(selected_scheme)
-                    or normalize_name(requested_name) in normalize_name(name)
                 )
             ]
-            if matching_rows.empty:
-                raise ValueError(f"AdvisorKhoj returned no capture data for '{requested_name}'.")
+            if len(matching_rows) != 1:
+                raise ValueError(
+                    f"AdvisorKhoj did not return exactly one result for '{selected_scheme}'. "
+                    "No report was generated from ambiguous or missing data."
+                )
+
             row = matching_rows.iloc[0]
+
             def value_for(phrase: str) -> Any:
                 column = column_for(capture_table, phrase)
                 return row[column] if column is not None else None
+
             data = FundCaptureData(
                 requested_name=requested_name,
                 scheme_name=str(row[scheme_column]).strip(),
-                category=selected_category,
-                period=selected_period,
+                category=category,
+                period=SUPPORTED_PERIODS[period_key],
                 amc_name=str(value_for("amc name") or "Not provided"),
                 benchmark_name=str(value_for("benchmark name") or "Not provided"),
                 launch_date=str(value_for("launch date") or "Not provided"),
@@ -264,26 +268,23 @@ def fetch_one_fund(requested_name: str, category: str, period: str) -> FundCaptu
                 up_capture_percent=parse_numeric(value_for("up market capture ratio")),
                 down_capture_percent=parse_numeric(value_for("down market capture ratio")),
                 capture_ratio=parse_numeric(value_for("capture ratio")),
-                source_url=source_url,
+                source_url=response.url,
                 retrieved_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
             )
             if data.up_capture_percent is None or data.down_capture_percent is None:
                 raise ValueError(f"AdvisorKhoj returned incomplete capture figures for '{requested_name}'.")
             return data
-    except PlaywrightTimeoutError as error:
-        raise RuntimeError(f"AdvisorKhoj timed out while retrieving '{requested_name}'. Try again later.") from error
     except (ValueError, RuntimeError):
         raise
+    except requests.RequestException as error:
+        raise RuntimeError(
+            f"Unable to contact AdvisorKhoj while retrieving '{requested_name}'. Try again later."
+        ) from error
     except Exception as error:
         raise RuntimeError(
             f"Unable to retrieve verified AdvisorKhoj data for '{requested_name}'. "
             "The source may have changed or may be temporarily unavailable."
         ) from error
-    finally:
-        try:
-            browser.close()
-        except Exception:
-            pass
 
 
 def deterministic_score(fund: FundCaptureData) -> float:
@@ -458,16 +459,27 @@ def build_pdf(funds: list[FundCaptureData], ranking: list[dict[str, Any]], analy
 
 def load_categories() -> list[str]:
     source_url = resolve_advisorkhoj_url(os.getenv("ADVISORKHOJ_URL", DEFAULT_SOURCE_URL))
-    with sync_playwright() as playwright:
-        browser = playwright.chromium.launch(headless=True, args=["--no-sandbox"])
-        try:
-            page = browser.new_page()
-            page.goto(source_url, wait_until="commit", timeout=60000)
-            page.wait_for_selector("select", timeout=20000)
-            _, _, categories = source_select_options(page)
-            return [category for category in categories if category and normalize_name(category) not in {"select", "select category"}]
-        finally:
-            browser.close()
+    try:
+        response = requests.get(
+            source_url,
+            headers={"User-Agent": "Mozilla/5.0 (compatible; FundReportResearch/1.0)"},
+            timeout=(10, 30),
+        )
+        response.raise_for_status()
+        document = lxml_html.fromstring(response.content)
+        categories = [
+            re.sub(r"\\s+", " ", value).strip()
+            for value in document.xpath('//select[@id="sel_schemeCategories"]/option/text()')
+        ]
+        categories = [
+            category for category in categories
+            if category and normalize_name(category) not in {"select", "select category"}
+        ]
+        if not categories:
+            raise ValueError("AdvisorKhoj did not expose any category options.")
+        return categories
+    except requests.RequestException as error:
+        raise RuntimeError("Unable to load AdvisorKhoj categories. Try again later.") from error
 
 
 def run_report(requested_funds: list[tuple[str, str]], period: str) -> tuple[list[FundCaptureData], list[dict[str, Any]], dict[str, Any], bytes]:
