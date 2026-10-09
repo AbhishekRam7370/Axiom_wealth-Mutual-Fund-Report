@@ -10,6 +10,7 @@ from app import (
     parse_numeric,
     rank_funds,
     resolve_advisorkhoj_url,
+    select_scheme_suggestion,
 )
 
 
@@ -110,3 +111,34 @@ def test_build_pdf_returns_pdf_bytes_with_source_data():
 )
 def test_resolve_advisorkhoj_url_uses_noscript_mode(url, expected):
     assert resolve_advisorkhoj_url(url) == expected
+
+
+def test_select_scheme_suggestion_matches_exact_canonical_label():
+    choices = ["Parag Parikh Flexi Cap Dir Gr", "Parag Parikh Flexi Cap Reg Gr"]
+    assert select_scheme_suggestion("Parag Parikh Flexi Cap Dir Gr", choices) == choices[0]
+    assert select_scheme_suggestion("Parag Parikh Flexi Cap Reg Gr", choices) == choices[1]
+
+
+def test_select_scheme_suggestion_uses_unique_result():
+    assert select_scheme_suggestion("Mirae Asset Large Cap Fund", ["Mirae Asset Large Cap Gr"]) == "Mirae Asset Large Cap Gr"
+
+
+def test_select_scheme_suggestion_resolves_explicit_direct_alias():
+    choices = ["Parag Parikh Flexi Cap Dir Gr", "Parag Parikh Flexi Cap Reg Gr"]
+    assert select_scheme_suggestion("Parag Parikh Flexi Cap Direct Growth", choices) == choices[0]
+
+
+def test_select_scheme_suggestion_resolves_explicit_regular_alias():
+    choices = ["Parag Parikh Flexi Cap Dir Gr", "Parag Parikh Flexi Cap Reg Gr"]
+    assert select_scheme_suggestion("Parag Parikh Flexi Cap Regular Growth", choices) == choices[1]
+
+
+def test_select_scheme_suggestion_rejects_ambiguous_generic_name():
+    choices = ["Parag Parikh Flexi Cap Dir Gr", "Parag Parikh Flexi Cap Reg Gr"]
+    with pytest.raises(ValueError, match="multiple AdvisorKhoj schemes"):
+        select_scheme_suggestion("Parag Parikh Flexi Cap Fund", choices)
+
+
+def test_select_scheme_suggestion_rejects_no_suggestions():
+    with pytest.raises(ValueError, match="no scheme suggestions"):
+        select_scheme_suggestion("Unknown Fund", [])
