@@ -197,6 +197,32 @@ def test_request_ai_analysis_rejects_non_object_json(monkeypatch):
         request_ai_analysis([fund], rank_funds([fund]), "5 years")
 
 
+def test_request_ai_analysis_rejects_non_string_scheme_name(monkeypatch):
+    import json
+
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    result = {
+        "overall_summary": "A concise summary.",
+        "funds": [{
+            "scheme_name": ["Fund One"],
+            "rank": 1,
+            "reason": "A reason.",
+            "strengths": ["A strength."],
+            "limitations": ["A limitation."],
+        }],
+    }
+    mock_response = Mock()
+    mock_response.status_code = 200
+    mock_response.json.return_value = {
+        "choices": [{"message": {"content": json.dumps(result)}}]
+    }
+    monkeypatch.setattr("app.requests.post", Mock(return_value=mock_response))
+    fund = make_fund("Fund One", 105, 90, 1.16)
+
+    with pytest.raises(RuntimeError, match="malformed scheme name"):
+        request_ai_analysis([fund], rank_funds([fund]), "5 years")
+
+
 def test_request_ai_analysis_rejects_changed_deterministic_rank(monkeypatch):
     import json
 
