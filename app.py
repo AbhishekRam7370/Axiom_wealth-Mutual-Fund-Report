@@ -40,7 +40,7 @@ DISCLAIMER = (
 
 
 def resolve_advisorkhoj_url(url: str | None = None) -> str:
-    """Ensure AdvisorKhoj uses the lightweight page mode for browser scraping."""
+    """Ensure AdvisorKhoj uses its lightweight HTML mode for HTTP retrieval."""
     configured_url = (url or os.getenv("ADVISORKHOJ_URL") or DEFAULT_SOURCE_URL).strip()
     parts = urlsplit(configured_url)
     query = parse_qsl(parts.query, keep_blank_values=True)
@@ -528,6 +528,7 @@ def main() -> None:
     with left:
         st.subheader("1. Choose your funds")
         st.write("Select 2–10 unique funds. Each fund can use its own AdvisorKhoj category.")
+        st.caption("Use an exact scheme label if multiple variants exist; specify Direct/Dir or Regular/Reg when needed.")
         pasted_names = st.text_area("Paste fund names (one per line, or comma-separated)", height=100, placeholder="HDFC Large Cap Fund\nMirae Asset Large Cap Fund")
         if st.button("Fill fund fields from pasted list", use_container_width=True):
             try:
@@ -550,7 +551,7 @@ def main() -> None:
             st.markdown(f"**Fund {index + 1}**")
             name_column, category_column = st.columns([1.5, 1])
             with name_column:
-                entry["name"] = st.text_input(f"Fund name {index + 1}", value=entry["name"], key=f"fund_name_{index}", label_visibility="collapsed", placeholder="Search or enter exact fund name")
+                entry["name"] = st.text_input(f"Fund name {index + 1}", value=entry["name"], key=f"fund_name_{index}", label_visibility="collapsed", placeholder="Fund name or exact AdvisorKhoj scheme label")
             with category_column:
                 if categories:
                     options = ["Select category"] + categories
