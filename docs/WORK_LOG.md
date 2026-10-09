@@ -10,6 +10,7 @@
 - Created draft pull request #1 for review.
 - The local Windows environment successfully installed dependencies and Chromium after a transient network failure. The contributor ran `python -m pytest -q`: 16 tests passed before the latest scheme-resolution adapter changes.
 - Live manual verification confirmed AdvisorKhoj's suggestion endpoint returns canonical labels `Parag Parikh Flexi Cap Dir Gr` and `Parag Parikh Flexi Cap Reg Gr`; direct results-page requests returned capture rows for both. Current application code now resolves canonical labels and rejects ambiguous generic names; the user still needs to pull the latest commit and run tests plus `fetch_one_fund` end to end.
+- The latest branch patch removes the Playwright runtime requirement, fetches categories with lxml, resolves source scheme names using the endpoint's prefix behavior, requests the actual results page by category/scheme/period, rejects ambiguous variants, and adds six scheme-resolution tests plus two mocked endpoint tests. There are now 24 test cases defined; execution against this latest commit is pending.
 
 ## Time accounting
 
