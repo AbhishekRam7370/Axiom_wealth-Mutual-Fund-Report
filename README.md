@@ -109,11 +109,38 @@ The app requires a valid source capture ratio for each fund and stops with an ac
 - PDF provenance includes source references and clickable links.
 - The latest reported local test suite contains 36 passing cases; the project owner also confirmed the latest UI and PDF review.
 
+## Deploy publicly on Streamlit Community Cloud
+
+The app can be deployed from the public GitHub repository without renting a VPS. The Community Cloud deployment itself can use its free tier, subject to Streamlit's current limits and availability.
+
+1. Open [Streamlit Community Cloud](https://share.streamlit.io/) and sign in with the GitHub account that can access this repository.
+2. Select **Create app** and choose the existing repository `AbhishekRam7370/Axiom_wealth-Mutual-Fund-Report`.
+3. Select branch `main` and entrypoint file `app.py`.
+4. Open **Advanced settings** and add the settings below to the Secrets field. Replace the placeholder with your own key; never commit it to GitHub.
+5. Deploy, then open the generated `*.streamlit.app` URL and test a fresh fund report and PDF.
+
+Example Streamlit secrets for OpenRouter's free-model router:
+
+```toml
+OPENAI_API_KEY = "PUT_YOUR_OPENROUTER_API_KEY_HERE"
+OPENAI_BASE_URL = "https://openrouter.ai/api/v1"
+OPENAI_MODEL = "openrouter/free"
+ADVISORKHOJ_URL = "https://www.advisorkhoj.com/mutual-funds-research/market-capture-ratio"
+```
+
+OpenRouter documents the `openrouter/free` router as free inference and provides an OpenAI-compatible Chat Completions endpoint. Availability, provider rate limits, model behavior, and free-tier terms can change; check the provider dashboard and test the app before sharing it. See the [OpenRouter free models router](https://openrouter.ai/openrouter/free/apps).
+
+The app now reads configuration from environment variables first and falls back to Streamlit's `st.secrets` configuration. Community Cloud secrets should be entered in the deployment UI, not saved in the repository.
+
+**Important:** Your local FreeLLMAPI endpoint `http://localhost:3002/v1` is not reachable from a cloud deployment; `localhost` inside Community Cloud refers to the deployed app environment, not your own computer. Use a reachable hosted AI endpoint. Do not paste an API key into source code, a public issue, or this chat.
+
 ## Deployment notes
 
-A Render blueprint is included in `render.yaml`, but a public deployment has not been verified. Before hosting, configure an AI endpoint reachable from the hosting environment, add credentials through secret settings, review provider costs/quotas, and protect public access so the endpoint cannot be abused.
+A Render blueprint is also included in `render.yaml`, but a public deployment on Render has not been verified. If using another host, configure an AI endpoint reachable from that environment, store credentials through the host's secret settings, review provider costs/quotas, and consider access protection for a public endpoint.
 
-A local URL such as `http://localhost:3002` for FreeLLMAPI will point to the hosted container itself—not to a service running on the developer's PC—when deployed remotely. Configure a reachable, securely protected endpoint for the hosted app.
+Streamlit Community Cloud apps run on the hosting provider's infrastructure and may sleep or have resource limits. Keep in mind that a public app can be used by anyone who has the URL; the current app does not include in-app user authentication or per-user request quotas. Monitor the AI provider's usage and limits when sharing the demo publicly.
+
+The most recent local test result reported by the project owner was **36 passed in 5.47 seconds** before the new Streamlit-secrets fallback and its regression test were added. Re-run `python -m pytest -q` after pulling the latest `main` before considering that configuration change fully verified.
 
 ## Financial disclaimer
 
