@@ -11,6 +11,7 @@ from app import (
     column_for,
     fetch_advisorkhoj_suggestions,
     deterministic_score,
+    get_config_value,
     identify_capture_table,
     parse_fund_names,
     parse_numeric,
@@ -414,3 +415,14 @@ def test_column_for_prefers_exact_capture_ratio_header():
     assert column_for(table, "down market capture ratio") == "Down Market Capture Ratio (%)"
     assert column_for(table, "capture ratio") == "Capture Ratio"
     assert table.iloc[0][column_for(table, "capture ratio")] == 1.33
+
+def test_get_config_value_prefers_environment_and_falls_back_to_streamlit_secrets(monkeypatch):
+    import app
+
+    monkeypatch.setattr(app.st, "secrets", {"APP_TEST_VALUE": "from-secrets"}, raising=False)
+    monkeypatch.delenv("APP_TEST_VALUE", raising=False)
+    assert get_config_value("APP_TEST_VALUE", "default") == "from-secrets"
+
+    monkeypatch.setenv("APP_TEST_VALUE", "from-environment")
+    assert get_config_value("APP_TEST_VALUE", "default") == "from-environment"
+

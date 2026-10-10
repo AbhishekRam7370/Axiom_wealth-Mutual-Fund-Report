@@ -40,9 +40,22 @@ DISCLAIMER = (
 )
 
 
+def get_config_value(name: str, default: str = "") -> str:
+    value = os.getenv(name)
+    if value is not None and value.strip():
+        return value.strip()
+    try:
+        value = st.secrets.get(name, default)
+    except Exception:
+        value = default
+    if value is None:
+        return default
+    return str(value).strip()
+
+
 def resolve_advisorkhoj_url(url: str | None = None) -> str:
     """Ensure AdvisorKhoj uses its lightweight HTML mode for HTTP retrieval."""
-    configured_url = (url or os.getenv("ADVISORKHOJ_URL") or DEFAULT_SOURCE_URL).strip()
+    configured_url = (url or get_config_value("ADVISORKHOJ_URL", DEFAULT_SOURCE_URL) or DEFAULT_SOURCE_URL).strip()
     parts = urlsplit(configured_url)
     query = parse_qsl(parts.query, keep_blank_values=True)
     if not any(key.casefold() == "pagespeed" for key, _ in query):
@@ -215,7 +228,7 @@ def fetch_advisorkhoj_suggestions(
 
 
 def fetch_one_fund(requested_name: str, category: str, period: str) -> FundCaptureData:
-    source_url = resolve_advisorkhoj_url(os.getenv("ADVISORKHOJ_URL", DEFAULT_SOURCE_URL))
+    source_url = resolve_advisorkhoj_url(get_config_value("ADVISORKHOJ_URL", DEFAULT_SOURCE_URL))
     period_key = period.casefold().strip()
     if period_key not in SUPPORTED_PERIODS or period_key not in PERIOD_CODES:
         raise ValueError(f"Unsupported analysis period: {period}")
@@ -344,11 +357,11 @@ def validate_unique_resolved_schemes(funds: list[FundCaptureData]) -> None:
 
 
 def request_ai_analysis(funds: list[FundCaptureData], ranking: list[dict[str, Any]], period: str) -> dict[str, Any]:
-    api_key = os.getenv("OPENAI_API_KEY", "").strip()
+    api_key = get_config_value("OPENAI_API_KEY", "")
     if not api_key:
         raise RuntimeError("AI analysis is not configured. Add OPENAI_API_KEY in the hosting environment.")
-    base_url = os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1").rstrip("/")
-    model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+    base_url = get_config_value("OPENAI_BASE_URL", "https://api.openai.com/v1").rstrip("/")
+    model = get_config_value("OPENAI_MODEL", "gpt-4o-mini")
     payload = {
         "period": period,
         "funds": [asdict(fund) for fund in funds],
@@ -571,7 +584,7 @@ def build_pdf(funds: list[FundCaptureData], ranking: list[dict[str, Any]], analy
 
 @st.cache_data(ttl=3600, show_spinner=False)
 def load_categories() -> list[str]:
-    source_url = resolve_advisorkhoj_url(os.getenv("ADVISORKHOJ_URL", DEFAULT_SOURCE_URL))
+    source_url = resolve_advisorkhoj_url(get_config_value("ADVISORKHOJ_URL", DEFAULT_SOURCE_URL))
     try:
         response = requests.get(
             source_url,
@@ -901,7 +914,7 @@ def main() -> None:
             )
             st.info("Benchmark and category differences matter. This report is a research aid, not personalized investment advice.")
             st.markdown("**Required configuration**")
-            if os.getenv("OPENAI_API_KEY", "").strip():
+            if get_config_value("OPENAI_API_KEY", ""):
                 st.markdown("✓ AI provider key detected in the local/hosting environment.")
             else:
                 st.warning("AI analysis is not configured. Add OPENAI_API_KEY to the environment or local .env file.")
