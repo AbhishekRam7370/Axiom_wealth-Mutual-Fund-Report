@@ -854,7 +854,6 @@ def main() -> None:
                     with name_column:
                         entry["name"] = st.text_input(
                             "Fund / scheme name",
-                            value=entry["name"],
                             key=f"fund_name_{index}",
                             placeholder="e.g. HDFC Large Cap Fund Dir Gr",
                             help="Use Direct/Dir or Regular/Reg when multiple scheme variants exist.",
